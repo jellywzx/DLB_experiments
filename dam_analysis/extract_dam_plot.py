@@ -10,13 +10,13 @@ below, then run:
 The script can:
   1. export all dam records;
   2. draw the global dam map and the four project focus-region maps;
-  3. screen a single built-in region;
+  3. screen a single built-in region using its standard basin mask;
   4. screen a custom lon/lat box;
   5. select dams upstream of an outlet using seq -> seq_next routing topology.
 
 Important:
-* The built-in region boxes are quick geographic screening windows, not exact
-  basin boundaries. For paper statistics, prefer topology mode or a basin polygon.
+* Built-in regions use the standard 06-minute basin masks and one-based
+  DamIX/DamIY routing-grid indices. Custom bbox and topology modes are unchanged.
 * CDO may interpret the unlimited dam-record dimension as a time dimension.
   This script reads the NetCDF/HDF5 structure directly and does not use CDO
   time semantics.
@@ -29,18 +29,29 @@ import re
 import sys
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-import h5py
-
-import matplotlib.pyplot as plt
-
 try:
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
     HAVE_CARTOPY = True
 except Exception:
     HAVE_CARTOPY = False
+
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import h5py
+import numpy as np
+import pandas as pd
+
+from openbench_dams_rivers_common import (
+    STANDARD_BASINS,
+    StandardBasinMask,
+    basin_boundary_arrays,
+    basin_grid_membership,
+    load_standard_basin_mask,
+)
 
 
 # ============================================================================
@@ -57,13 +68,13 @@ OUTDIR = Path("/share/home/dq134/wzx/openbench/postprocess/dam_analysis/dam_data
 
 # Analysis mode:
 #   "all"      : global + Missouri + Lower Mississippi + Amazon + Mekong
-#   "region"   : one built-in region selected by REGION_NAME
+#   "region"   : one standard masked basin selected by REGION_NAME
 #   "bbox"     : one custom lon/lat box defined by CUSTOM_BBOX
 #   "topology" : exact upstream-of-outlet screening using seq -> seq_next
 ANALYSIS_MODE = "all"
 
-# Used only when ANALYSIS_MODE = "region".
-# Choices: "global", "missouri", "lower_mississippi", "amazon", "mekong"
+# Used only when ANALYSIS_MODE = "region". Choices: "global" or one of
+# "amazon", "missouri", "lower_mississippi", "mekong".
 REGION_NAME = "missouri"
 
 # Used only when ANALYSIS_MODE = "bbox".
@@ -110,15 +121,7 @@ DAM_VARS = {
     "seq": "dam_seq",
 }
 
-# Quick screening boxes for the four focus regions in the project design.
-# Format: lon_min, lon_max, lat_min, lat_max
-REGIONS = {
-    "global": (-180.0, 180.0, -90.0, 90.0),
-    "missouri": (-116.0, -89.0, 36.0, 50.5),
-    "lower_mississippi": (-94.5, -88.0, 28.0, 37.0),
-    "amazon": (-82.0, -44.0, -22.0, 7.0),
-    "mekong": (93.0, 110.0, 8.0, 34.0),
-}
+GLOBAL_BBOX = (-180.0, 180.0, -90.0, 90.0)
 
 MISSOURI_MAINSTEM = [
     "Fort Peck",
@@ -275,6 +278,22 @@ def subset_bbox(df: pd.DataFrame, bbox):
     return df[df["lon"].between(w, e) & df["lat"].between(s, n)].copy()
 
 
+def subset_basin(df: pd.DataFrame, basin: StandardBasinMask) -> pd.DataFrame:
+    """Select dams whose one-based routing-grid indices fall inside a basin mask."""
+    x_index = pd.to_numeric(df["DamIX"], errors="coerce").to_numpy(
+        dtype=float, na_value=np.nan
+    )
+    y_index = pd.to_numeric(df["DamIY"], errors="coerce").to_numpy(
+        dtype=float, na_value=np.nan
+    )
+    inside, invalid_count = basin_grid_membership(x_index, y_index, basin)
+    print(
+        f"Basin mask {basin.key}: selected={int(inside.sum()):,}/{len(df):,}, "
+        f"invalid_grid_indices={invalid_count:,}, path={basin.path}"
+    )
+    return df.loc[inside].copy()
+
+
 def haversine_km(lon, lat, lon0, lat0):
     lon = np.deg2rad(np.asarray(lon, dtype=float))
     lat = np.deg2rad(np.asarray(lat, dtype=float))
@@ -413,7 +432,13 @@ def marker_sizes(vol):
     return 15.0 + 115.0 * z / zmax
 
 
-def plot_map(df: pd.DataFrame, name: str, outpng: Path, bbox=None):
+def plot_map(
+    df: pd.DataFrame,
+    name: str,
+    outpng: Path,
+    bbox=None,
+    basin: StandardBasinMask | None = None,
+):
     if df.empty:
         print(f"Skip map for {name}: no dams.")
         return
@@ -446,6 +471,18 @@ def plot_map(df: pd.DataFrame, name: str, outpng: Path, bbox=None):
         gridlines.top_labels = False
         gridlines.right_labels = False
         transform = ccrs.PlateCarree()
+        if basin is not None:
+            boundary_lon, boundary_lat, boundary_mask = basin_boundary_arrays(basin)
+            ax.contour(
+                boundary_lon,
+                boundary_lat,
+                boundary_mask.astype(float),
+                levels=[0.5],
+                colors=["black"],
+                linewidths=1.1,
+                transform=transform,
+                zorder=4.5,
+            )
     else:
         fig, ax = plt.subplots(figsize=(10, 7))
         transform = None
@@ -454,6 +491,16 @@ def plot_map(df: pd.DataFrame, name: str, outpng: Path, bbox=None):
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
         ax.grid(alpha=0.25)
+        if basin is not None:
+            boundary_lon, boundary_lat, boundary_mask = basin_boundary_arrays(basin)
+            ax.contour(
+                boundary_lon,
+                boundary_lat,
+                boundary_mask.astype(float),
+                levels=[0.5],
+                colors=["black"],
+                linewidths=1.1,
+            )
 
     # Unknown/invalid construction year first.
     if (~valid).any():
@@ -533,7 +580,13 @@ def safe_slug(s: str) -> str:
     return s.strip("_") or "region"
 
 
-def save_region(df: pd.DataFrame, name: str, outdir: Path, bbox=None):
+def save_region(
+    df: pd.DataFrame,
+    name: str,
+    outdir: Path,
+    bbox=None,
+    basin: StandardBasinMask | None = None,
+):
     slug = safe_slug(name)
     csv_path = outdir / f"dams_{slug}.csv"
     map_path = outdir / f"dams_{slug}_map.png"
@@ -542,7 +595,7 @@ def save_region(df: pd.DataFrame, name: str, outdir: Path, bbox=None):
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
     print(f"Wrote {csv_path}")
     print_summary(df, name)
-    plot_map(df, name, map_path, bbox=bbox)
+    plot_map(df, name, map_path, bbox=bbox, basin=basin)
     plot_construction_history(df, name, hist_path)
 
 
@@ -612,19 +665,35 @@ def main():
 
     if mode == "region":
         region = str(REGION_NAME).strip().lower()
-        if region not in REGIONS:
+        if region == "global":
+            save_region(dams, "global", outdir, bbox=GLOBAL_BBOX)
+            return
+        if region not in STANDARD_BASINS:
             raise ValueError(
-                f"Unknown REGION_NAME={REGION_NAME!r}. Choices: {', '.join(REGIONS)}"
+                f"Unknown REGION_NAME={REGION_NAME!r}. "
+                f"Choices: global, {', '.join(STANDARD_BASINS)}"
             )
-        bbox = REGIONS[region]
-        save_region(subset_bbox(dams, bbox), region, outdir, bbox=bbox)
+        basin = load_standard_basin_mask(region)
+        save_region(
+            subset_basin(dams, basin),
+            region,
+            outdir,
+            bbox=basin.extent,
+            basin=basin,
+        )
         return
 
     # mode == "all": global summary plus the four project focus-region views.
-    save_region(dams, "global", outdir, bbox=REGIONS["global"])
-    for name in ("missouri", "lower_mississippi", "amazon", "mekong"):
-        bbox = REGIONS[name]
-        save_region(subset_bbox(dams, bbox), name, outdir, bbox=bbox)
+    save_region(dams, "global", outdir, bbox=GLOBAL_BBOX)
+    for name in STANDARD_BASINS:
+        basin = load_standard_basin_mask(name)
+        save_region(
+            subset_basin(dams, basin),
+            name,
+            outdir,
+            bbox=basin.extent,
+            basin=basin,
+        )
 
 
 if __name__ == "__main__":

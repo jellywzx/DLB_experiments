@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""在 OpenBench 空间结果图上叠加河网、流域边界和水坝。
+"""在 OpenBench 空间结果图上叠加河网、流域边界、水坝、堤防和分汊路径。
 
 运行说明
 --------
@@ -7,32 +7,70 @@
 
     cd /share/home/dq134/wzx/openbench/postprocess/dam_analysis
 
-1. 使用脚本内的默认评估名称和路径，批量识别并绘制 CSV 和 NetCDF：
+三个可选图层默认关闭。使用 ``-D`` 显示水坝，``-L`` 显示堤防保护洪泛区比例，
+``-B`` 显示分汊路径。同一个短参数中的字母合并作图，例如 ``-DB``、``-LB`` 和
+``-DLB``；分开书写则分别作图，例如 ``-D -L -B`` 会为每个图层各生成一套图片。
+``--show-dams``、``--show-levee``、``--show-bifurcations`` 分别等价于独立的短参数。
+
+1. 使用默认评估名称和路径，批量识别并绘制站点 CSV 和网格 NetCDF：
 
     python plot_openbench_dams_rivers.py
 
-2. 指定 OpenBench 评估名称，使用由该名称推导出的默认输入、输出路径：
-
-    python plot_openbench_dams_rivers.py --evaluation-name Amazon_inundation_D
-
-3. 绘制单个站点 CSV 或网格 NetCDF，并指定输出文件：
+2. 绘制单个站点 CSV，并同时叠加水坝、堤防和分汊路径：
 
     python plot_openbench_dams_rivers.py \
-        --evaluation /path/to/metric__anomaly.csv \
-        --output /path/to/metric__dams_rivers.png
+        --evaluation /path/to/station_metric.csv \
+        -DLB
 
-4. 从指定的 metrics、scores 或 ``Diff_Plot`` 目录批量绘图：
+3. 绘制单个网格 NetCDF，只叠加堤防覆盖率：
+
+    python plot_openbench_dams_rivers.py \
+        --evaluation /path/to/grid_metric.nc \
+        -L
+
+4. 绘制单个结果，只叠加分汊路径，并严格使用指定输出文件名：
+
+    python plot_openbench_dams_rivers.py \
+        --evaluation /path/to/result.csv \
+        -B \
+        --output /path/to/custom_output.png
+
+5. 批量处理 ``metrics``、``scores`` 或 ``Diff_Plot`` 目录中的站点和网格结果：
 
     python plot_openbench_dams_rivers.py \
         --evaluation-dir /path/to/comparisons/Diff_Plot \
-        --output-dir /path/to/output_directory
+        --output-dir /path/to/output_directory \
+        -DLB -j 4
+
+   若要分别生成水坝、堤防和分汊路径图片，请分开书写开关：
+
+    python plot_openbench_dams_rivers.py \
+        --evaluation-dir /path/to/scores \
+        --output-dir /path/to/output_directory \
+        -D -L -B -j 4
+
+6. 根据评估名称自动推导默认输入和输出目录：
+
+    python plot_openbench_dams_rivers.py \
+        --evaluation-name Amazon_inundation_D \
+        -L
+
+未显式指定 ``--output`` 时，文件名使用 ``__openbench_map__base`` 或按
+Dam、Levee、Bifurcation 的固定顺序追加图层标签，例如
+``__openbench_map__dam_levee_bifurcation``。显式指定 ``--output`` 时不会
+修改用户给出的路径。
 
 输入 CSV 需包含站点经纬度，或包含可从同一 case 原始 evaluation CSV 回查的站点 ID。
 输入 NetCDF 需包含一维经纬度坐标和空间二维变量。
+存在标准流域掩膜时，堤防和分汊线段只有在两个端点均位于流域内时才会绘制；
+没有流域掩膜时按地图范围裁剪。使用 ``--routing-file`` 可指定路由文件。
 如需指定指标列、地图范围、河网精度、水坝年份或关闭流域边界，可使用相应参数。
 查看全部参数及默认值：
 
     python plot_openbench_dams_rivers.py --help
+
+``-j/--workers`` 仅加速批处理渲染，默认值为1。建议根据作业申请的CPU和内存设置，
+例如 ``-j 4``。单文件模式只有一张图，因此不会拆分到多个进程。
 """
 
 from __future__ import annotations
@@ -40,15 +78,16 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import multiprocessing
 import re
 import sys
 from collections import deque
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-import h5py
 import matplotlib
 
 matplotlib.use("Agg")
@@ -106,10 +145,19 @@ from openbench_dams_rivers_common import (
     filter_dams_by_year,
     filter_dams_to_extent,
     infer_region_name,
+    netcdf_attribute,
+    netcdf_variable,
     openbench_input_dir,
+    open_netcdf,
     region_name_from_evaluation,
     routing_numeric_1d,
     validate_extent,
+)
+from routing_overlay_layers import (
+    RoutingOverlayLayers,
+    RoutingOverlaySource,
+    load_routing_overlay_source,
+    select_routing_overlay_layers,
 )
 
 EVALUATION_NAME = "LowerMississippi_inundation_D"
@@ -120,9 +168,9 @@ RIVER_FEATURE_SCALES = {
     "coarse": "110m",
 }
 DAM_STORAGE_CLASSES = (
-    (0.0, 1000.0, "o", "Dam storage < 1,000 million m³"),
-    (1000.0, 10000.0, "s", "Dam storage 1,000–10,000 million m³"),
-    (10000.0, np.inf, "^", "Dam storage ≥ 10,000 million m³"),
+    (0.0, 1000.0, "#2166ac", "Dam storage < 1,000 million m³"),
+    (1000.0, 10000.0, "#f28e2b", "Dam storage 1,000–10,000 million m³"),
+    (10000.0, np.inf, "#b2182b", "Dam storage ≥ 10,000 million m³"),
 )
 STATION_METADATA_COLUMNS = {
     "ID",
@@ -137,6 +185,9 @@ STATION_METADATA_COLUMNS = {
     "reason",
     "n_models",
 }
+
+_STATION_WORKER_CONTEXT = None
+_GRID_WORKER_CONTEXT = None
 
 # Default paths and parameters
 DEFAULT_BASIN_CACHE_DIR = Path(
@@ -245,6 +296,18 @@ class OpenBenchPlotStyle:
     colorbar_label: str
 
 
+@dataclass(frozen=True)
+class MapLayout:
+    figure_size: tuple[float, float]
+    subplot_left: float
+    subplot_right: float
+    subplot_bottom: float
+    subplot_top: float
+    legend_left: float
+    metric_colorbar_orientation: str
+    metric_colorbar_explicit: bool
+
+
 def _case_root(path: Path) -> Path | None:
     for parent in (path.parent, *path.parents):
         if (parent / "run_manifest.json").is_file():
@@ -267,6 +330,21 @@ def _manifest_document(path: Path) -> dict[str, object]:
 def _run_manifest(path: Path) -> dict[str, object]:
     config = _manifest_document(path).get("canonical_config", {})
     return config if isinstance(config, dict) else {}
+
+
+def _evaluation_name_from_input(path: Path) -> str:
+    """Infer the OpenBench case name from its manifest or output directory."""
+    project = _run_manifest(path).get("project", {})
+    if isinstance(project, dict):
+        name = project.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+
+    resolved = path.expanduser().resolve()
+    for parent in (resolved, *resolved.parents):
+        if parent.parent.name == "output":
+            return parent.name
+    return EVALUATION_NAME
 
 
 def _manifest_display_unit(
@@ -545,23 +623,84 @@ def _add_overlay_title(
     region_name: str | None,
     dam_year_filter_label: str | None,
 ) -> OpenBenchPlotStyle:
-    if style.title:
-        return style
-    region_prefix = f"{region_name} " if region_name else ""
+    item = metadata.item.replace("_", " ")
+    first_line = f"{region_name} | {item}" if region_name else item
+
     measure = metadata.measure.replace("_", " ")
-    product = " Ensemble Mean" if metadata.product_type == "ensemble_mean" else ""
-    title = f"{region_prefix}{metadata.item} {measure}{product}, River Network, and Dams"
-    details = []
+    if metadata.product_type == "ensemble_mean":
+        measure += " ensemble mean"
+    elif metadata.product_type in {"anomaly", "difference"}:
+        measure += f" {metadata.product_type}"
+    second_parts = [measure]
     if metadata.reference:
-        details.append(f"Reference: {metadata.reference}")
+        second_parts.append(f"Ref: {metadata.reference}")
+
+    third_parts = []
     if metadata.simulations:
-        label = "Simulation" if len(metadata.simulations) == 1 else "Simulations"
-        details.append(f"{label}: {' vs '.join(metadata.simulations)}")
+        label = "Sim" if len(metadata.simulations) == 1 else "Sims"
+        third_parts.append(f"{label}: {' vs '.join(metadata.simulations)}")
     if dam_year_filter_label:
-        details.append(dam_year_filter_label)
-    if details:
-        title += "\n" + "  |  ".join(details)
+        dam_label = dam_year_filter_label.replace(
+            "dam construction year < ", "Dams before "
+        ).replace("dam construction year ≤ ", "Dams through ")
+        third_parts.append(dam_label)
+
+    title = "\n".join(
+        (first_line, " | ".join(second_parts), " | ".join(third_parts))
+    )
     return replace(style, title=title)
+
+
+def _resolve_map_layout(
+    extent: tuple[float, float, float, float],
+    option: dict[str, object],
+    has_year_colorbar: bool,
+    has_levee_colorbar: bool = False,
+) -> MapLayout:
+    """Return a bounded layout based on the projected geographic aspect ratio."""
+    west, east, south, north = extent
+    mid_latitude = math.radians((south + north) / 2.0)
+    geographic_aspect = (east - west) * max(math.cos(mid_latitude), 0.2) / (north - south)
+    geographic_aspect = min(max(geographic_aspect, 0.45), 2.4)
+
+    explicit_colorbar = bool(option.get("colorbar_position_set"))
+    configured_orientation = str(option.get("colorbar_position", "vertical"))
+    metric_orientation = (
+        configured_orientation
+        if explicit_colorbar
+        else ("horizontal" if geographic_aspect >= 1.35 else "vertical")
+    )
+
+    figure_height = 8.0
+    map_width = min(max(5.2 * geographic_aspect, 4.2), 8.8)
+    colorbar_width = 1.35 if metric_orientation == "vertical" and not explicit_colorbar else 0.0
+    legend_width = 3.65
+    figure_width = min(max(map_width + colorbar_width + legend_width + 1.1, 9.0), 14.0)
+
+    left_inches = 0.75
+    right_panel_inches = legend_width + colorbar_width + 0.25
+    bottom_inches = 1.35 if has_year_colorbar else 0.85
+    if metric_orientation == "horizontal" and not explicit_colorbar:
+        bottom_inches += 1.1
+    if has_levee_colorbar:
+        bottom_inches += 1.1
+
+    subplot_left = left_inches / figure_width
+    subplot_right = 1.0 - right_panel_inches / figure_width
+    return MapLayout(
+        figure_size=(figure_width, figure_height),
+        subplot_left=subplot_left,
+        subplot_right=subplot_right,
+        subplot_bottom=bottom_inches / figure_height,
+        subplot_top=0.77,
+        legend_left=(
+            subplot_right + 1.15 / figure_width
+            if metric_orientation == "vertical" and not explicit_colorbar
+            else subplot_right + 0.04
+        ),
+        metric_colorbar_orientation=metric_orientation,
+        metric_colorbar_explicit=explicit_colorbar,
+    )
 
 
 def read_grid(path: Path, requested_variable: str | None = None) -> GridData:
@@ -747,6 +886,31 @@ def points_inside_basin(
     return np.asarray(selected.values, dtype=bool)
 
 
+def select_openbench_routing_overlays(
+    source: RoutingOverlaySource | None,
+    extent: tuple[float, float, float, float],
+    basin_mask: BasinMask | None,
+    args: argparse.Namespace,
+) -> RoutingOverlayLayers | None:
+    if source is None or not (args.show_levee or args.show_bifurcations):
+        return None
+    route_inside = None
+    if basin_mask is not None:
+        route_inside = points_inside_basin(source.longitude, source.latitude, basin_mask)
+    layers = select_routing_overlay_layers(
+        source,
+        extent,
+        show_levee=args.show_levee,
+        show_bifurcations=args.show_bifurcations,
+        route_inside=route_inside,
+    )
+    if args.show_levee and not len(layers.levee_segments):
+        print("Warning: no valid levee segments remain in the selected map area.")
+    if args.show_bifurcations and not len(layers.bifurcation_segments):
+        print("Warning: no bifurcation paths remain in the selected map area.")
+    return layers
+
+
 def load_river_network(
     routing_path: Path,
     detail: str,
@@ -759,13 +923,13 @@ def load_river_network(
     if not routing_path.is_file():
         raise FileNotFoundError(f"Routing file not found: {routing_path}")
 
-    with h5py.File(routing_path, "r") as h5:
+    with open_netcdf(routing_path) as h5:
         sequence_raw = routing_numeric_1d(h5, "seq")
         next_raw = routing_numeric_1d(h5, "seq_next")
         longitude = routing_numeric_1d(h5, "seq_lon")
         latitude = routing_numeric_1d(h5, "seq_lat")
         upstream_area = routing_numeric_1d(h5, "topo_uparea")
-        units = h5["topo_uparea"].attrs.get("units", b"")
+        units = netcdf_attribute(netcdf_variable(h5, "topo_uparea"), "units", b"")
 
     lengths = {
         len(sequence_raw),
@@ -931,10 +1095,22 @@ def read_dams(path: Path) -> pd.DataFrame:
     return dams
 
 
-def _add_openbench_colorbar(fig, ax, mappable, style: OpenBenchPlotStyle):
+def empty_dams() -> pd.DataFrame:
+    return pd.DataFrame(
+        {name: pd.Series(dtype=float) for name in ("lon", "lat", "TotalVol_mcm", "year")}
+    )
+
+
+def _add_openbench_colorbar(
+    fig,
+    ax,
+    mappable,
+    style: OpenBenchPlotStyle,
+    layout: MapLayout,
+):
     option = style.option
-    orientation = str(option.get("colorbar_position", "vertical"))
-    if option.get("colorbar_position_set"):
+    orientation = layout.metric_colorbar_orientation
+    if layout.metric_colorbar_explicit:
         bounds = [
             float(option["colorbar_left"]),
             float(option["colorbar_bottom"]),
@@ -944,10 +1120,9 @@ def _add_openbench_colorbar(fig, ax, mappable, style: OpenBenchPlotStyle):
     else:
         left, bottom, width, height = ax.get_position().bounds
         if orientation == "horizontal":
-            offset = 0.15 if option.get("xticklabel") else 0.1
-            bounds = [left + width / 8.0, bottom - offset, width * 0.75, 0.03]
+            bounds = [left, bottom - 0.085, width, 0.025]
         else:
-            bounds = [left + width + 0.01, bottom, 0.015, height]
+            bounds = [left + width + 0.012, bottom, 0.018, height]
     colorbar = fig.colorbar(
         mappable,
         cax=fig.add_axes(bounds),
@@ -956,18 +1131,114 @@ def _add_openbench_colorbar(fig, ax, mappable, style: OpenBenchPlotStyle):
         extend=style.extend,
         orientation=orientation,
     )
-    colorbar.set_label(
-        style.colorbar_label,
-        rotation=0,
-        fontsize=16,
-        weight="bold",
-        labelpad=10,
-        ha="left",
-        va="bottom",
-    )
+    if orientation == "horizontal":
+        colorbar.set_label(style.colorbar_label.replace("\n", " "), fontsize=11, labelpad=6)
+    else:
+        colorbar.set_label(
+            style.colorbar_label.replace("\n", " "),
+            rotation=90,
+            fontsize=11,
+            weight="bold",
+            labelpad=14,
+            ha="center",
+            va="center",
+        )
     colorbar.ax.tick_params(labelsize=float(option["xtick"]))
     colorbar.solids.set_edgecolor("face")
     return colorbar
+
+
+def _add_year_colorbar(fig, ax, year_points, layout: MapLayout):
+    left, bottom, width, _ = ax.get_position().bounds
+    extra_offset = (
+        0.19
+        if layout.metric_colorbar_orientation == "horizontal"
+        and not layout.metric_colorbar_explicit
+        else 0.085
+    )
+    year_bar = fig.colorbar(
+        year_points,
+        cax=fig.add_axes([left, bottom - extra_offset, width, 0.025]),
+        orientation="horizontal",
+    )
+    year_bar.set_label("Dam construction year", fontsize=11, labelpad=5)
+    year_bar.ax.tick_params(labelsize=9)
+    return year_bar
+
+
+def _add_levee_colorbar(fig, ax, levee_lines, layout: MapLayout, has_year_colorbar: bool):
+    left, bottom, width, _ = ax.get_position().bounds
+    metric_is_horizontal = (
+        layout.metric_colorbar_orientation == "horizontal"
+        and not layout.metric_colorbar_explicit
+    )
+    offset = 0.085 + (0.105 if metric_is_horizontal else 0.0)
+    if has_year_colorbar:
+        offset += 0.105
+    colorbar = fig.colorbar(
+        levee_lines,
+        cax=fig.add_axes([left, bottom - offset, width, 0.025]),
+        orientation="horizontal",
+    )
+    colorbar.set_label("Protected floodplain fraction (%)", fontsize=11, labelpad=5)
+    colorbar.ax.tick_params(labelsize=9)
+    return colorbar
+
+
+def _draw_routing_overlays(ax, layers: RoutingOverlayLayers | None, projection):
+    levee_lines = None
+    if layers is None:
+        return levee_lines
+    if len(layers.levee_segments):
+        levee_lines = LineCollection(
+            layers.levee_segments,
+            cmap="viridis",
+            norm=Normalize(vmin=0.0, vmax=100.0),
+            linewidths=0.9,
+            alpha=0.96,
+            transform=projection,
+            zorder=3.3,
+        )
+        levee_lines.set_array(layers.levee_protected_percent)
+        ax.add_collection(levee_lines)
+    if len(layers.bifurcation_segments):
+        ax.add_collection(
+            LineCollection(
+                layers.bifurcation_segments,
+                colors="#d62728",
+                linewidths=0.7,
+                alpha=0.9,
+                transform=projection,
+                zorder=3.6,
+            )
+        )
+    return levee_lines
+
+
+def _add_routing_overlay_legend(legend_handles: list[object], layers: RoutingOverlayLayers | None) -> None:
+    if layers is None:
+        return
+    if len(layers.levee_segments):
+        legend_handles.append(
+            Line2D([], [], color="#2a788e", linewidth=1.8,
+                   label=f"Levee-protected floodplain ({len(layers.levee_segments):,} segments)")
+        )
+    if len(layers.bifurcation_segments):
+        legend_handles.append(
+            Line2D([], [], color="#d62728", linewidth=1.5,
+                   label=f"Bifurcations ({len(layers.bifurcation_segments):,} paths)")
+        )
+
+
+def _routing_overlay_summary(layers: RoutingOverlayLayers | None) -> str:
+    if layers is None:
+        return ""
+    parts = []
+    if layers.levee_source_count:
+        parts.append(f"levee: {len(layers.levee_segments):,}")
+    if layers.bifurcation_source_count:
+        parts.append(f"bifurcations: {len(layers.bifurcation_segments):,}")
+    return "  |  " + ", ".join(parts) if parts else ""
 
 
 def plot_grid_map(
@@ -982,11 +1253,22 @@ def plot_grid_map(
     dam_year_filter_label: str | None,
     basin_mask: BasinMask | None,
     river_network: RiverNetwork | None,
+    routing_overlays: RoutingOverlayLayers | None = None,
+    show_dams: bool = False,
 ) -> None:
     option = style.option
     matplotlib.rc("font", family=option["font"])
     projection = ccrs.PlateCarree()
-    fig = plt.figure(figsize=(float(option["x_wise"]), float(option["y_wise"])))
+    has_year_colorbar = not dams.empty and bool(dams["year"].between(1800, 2030).any())
+    has_levee_colorbar = routing_overlays is not None and bool(len(routing_overlays.levee_segments))
+    layout = _resolve_map_layout(extent, option, has_year_colorbar, has_levee_colorbar)
+    fig = plt.figure(figsize=layout.figure_size)
+    fig.subplots_adjust(
+        left=layout.subplot_left,
+        right=layout.subplot_right,
+        bottom=layout.subplot_bottom,
+        top=layout.subplot_top,
+    )
     ax = fig.add_subplot(1, 1, 1, projection=projection)
     ax.set_extent(extent, crs=projection)
 
@@ -1035,6 +1317,7 @@ def plot_grid_map(
             zorder=3,
         )
         ax.add_collection(river_lines)
+    levee_lines = _draw_routing_overlays(ax, routing_overlays, projection)
     ax.add_feature(cfeature.BORDERS.with_scale("50m"), edgecolor="0.35", linewidth=0.5, zorder=3)
     ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="0.2", linewidth=0.75, zorder=3)
     if basin_mask is not None:
@@ -1071,7 +1354,7 @@ def plot_grid_map(
                 year_min -= 0.5
                 year_max += 0.5
             year_norm = Normalize(vmin=year_min, vmax=year_max)
-            for lower, upper, marker, _ in DAM_STORAGE_CLASSES:
+            for lower, upper, edgecolor, _ in DAM_STORAGE_CLASSES:
                 selected = (
                     valid_year.to_numpy()
                     & (storage_values >= lower)
@@ -1086,8 +1369,8 @@ def plot_grid_map(
                     s=dam_sizes[selected],
                     cmap="viridis",
                     norm=year_norm,
-                    marker=marker,
-                    edgecolors="black",
+                    marker="^",
+                    edgecolors=edgecolor,
                     linewidths=0.7,
                     alpha=0.96,
                     transform=projection,
@@ -1096,7 +1379,7 @@ def plot_grid_map(
                 if year_points is None:
                     year_points = points
         invalid_year = (~valid_year).to_numpy()
-        for lower, upper, marker, _ in DAM_STORAGE_CLASSES:
+        for lower, upper, edgecolor, _ in DAM_STORAGE_CLASSES:
             selected = (
                 invalid_year
                 & (storage_values >= lower)
@@ -1108,26 +1391,20 @@ def plot_grid_map(
                     dams.loc[selected, "lat"],
                     s=dam_sizes[selected],
                     color="0.65",
-                    marker=marker,
-                    edgecolors="black",
+                    marker="^",
+                    edgecolors=edgecolor,
                     linewidths=0.7,
                     transform=projection,
                     zorder=5,
                 )
 
+    fig.canvas.draw()
     if year_points is not None:
-        year_bar = fig.colorbar(
-            year_points,
-            ax=ax,
-            orientation="horizontal",
-            pad=0.08,
-            shrink=0.67,
-            aspect=30,
-        )
-        year_bar.set_label("Dam construction year", fontsize=11)
-        year_bar.ax.tick_params(labelsize=9)
+        _add_year_colorbar(fig, ax, year_points, layout)
 
-    _add_openbench_colorbar(fig, ax, grid_layer, style)
+    _add_openbench_colorbar(fig, ax, grid_layer, style, layout)
+    if levee_lines is not None:
+        _add_levee_colorbar(fig, ax, levee_lines, layout, year_points is not None)
 
     legend_handles: list[object] = []
     if basin_mask is not None:
@@ -1144,29 +1421,34 @@ def plot_grid_map(
                 label=river_network.legend_label,
             )
         )
+    _add_routing_overlay_legend(legend_handles, routing_overlays)
     if not dams.empty:
-        for _, _, marker, label in DAM_STORAGE_CLASSES:
+        for _, _, edgecolor, label in DAM_STORAGE_CLASSES:
             legend_handles.append(
                 Line2D(
                     [],
                     [],
-                    marker=marker,
+                    marker="^",
                     linestyle="none",
                     markerfacecolor="#5ec962",
-                    markeredgecolor="black",
+                    markeredgecolor=edgecolor,
                     markersize=8,
                     label=label,
                 )
             )
-    ax.legend(
+    fig.legend(
         handles=legend_handles,
-        loc="lower left",
+        loc="center left",
+        bbox_to_anchor=(
+            layout.legend_left,
+            (layout.subplot_bottom + layout.subplot_top) / 2.0,
+        ),
         frameon=True,
         framealpha=0.94,
         facecolor="white",
         edgecolor="0.7",
         fontsize=8.8,
-        title="Map layers and dam-size scale",
+        title="Map layers and dam-storage classes" if not dams.empty else "Map layers",
         title_fontsize=9.2,
         borderpad=0.7,
     )
@@ -1175,7 +1457,7 @@ def plot_grid_map(
     ax.set_ylabel(str(option.get("yticklabel", "")), fontsize=float(option["ytick"]) + 1)
     ax.set_title(
         style.title,
-        fontsize=float(option["title_size"]),
+        fontsize=min(float(option["title_size"]), 15.0),
         fontweight="bold",
         pad=14,
     )
@@ -1184,11 +1466,18 @@ def plot_grid_map(
         if river_network is not None
         else "CoLM rivers: none"
     )
+    summary_parts = [river_summary]
+    if show_dams:
+        summary_parts.append(
+            f"dams: {len(dams):,} (triangles, log-scaled total storage)"
+        )
+    overlay_summary = _routing_overlay_summary(routing_overlays).removeprefix("  |  ")
+    if overlay_summary:
+        summary_parts.append(overlay_summary)
     fig.text(
         0.5,
-        0.045,
-        f"Additional layers — {river_summary}  |  Triangles: dams "
-        f"(n={len(dams)}, size = log-scaled total storage)",
+        0.012,
+        f"Additional layers — {'  |  '.join(summary_parts)}",
         ha="center",
         fontsize=9.5,
         color="0.3",
@@ -1207,18 +1496,22 @@ def render_grid_file(
     extent: tuple[float, float, float, float],
     basin_mask: BasinMask | None,
     river_network: RiverNetwork | None,
+    routing_overlays: RoutingOverlayLayers | None = None,
 ) -> None:
     grid = read_grid(grid_path, args.value_variable)
     if basin_mask is not None:
         grid = apply_basin_mask(grid, basin_mask)
-    visible_dams, dam_year_filter_label = filter_dams_by_year(
-        dams,
-        args.dam_built_before,
-        args.dam_built_by,
-    )
-    visible_dams = filter_dams_to_extent(visible_dams, extent)
-    if basin_mask is not None:
-        visible_dams = filter_points_to_basin(visible_dams, basin_mask)
+    visible_dams = empty_dams()
+    dam_year_filter_label = None
+    if args.show_dams:
+        visible_dams, dam_year_filter_label = filter_dams_by_year(
+            dams,
+            args.dam_built_before,
+            args.dam_built_by,
+        )
+        visible_dams = filter_dams_to_extent(visible_dams, extent)
+        if basin_mask is not None:
+            visible_dams = filter_points_to_basin(visible_dams, basin_mask)
     metadata = infer_result_metadata(grid_path, grid.variable, grid.attrs, "grid")
     style = resolve_openbench_plot_style(grid.values, metadata, args)
     region_name = infer_region_name(grid_path, args.region_name)
@@ -1238,22 +1531,72 @@ def render_grid_file(
         dam_year_filter_label,
         basin_mask,
         river_network,
+        routing_overlays,
+        args.show_dams,
     )
     valid_count = int(np.isfinite(grid.values).sum())
     print(
         f"Wrote {output_path} "
         f"(variable={grid.variable}, product={metadata.product_type}, valid_cells={valid_count}, "
         f"dams={len(visible_dams)}, rivers={0 if river_network is None else len(river_network.segments)}, "
-        f"river_detail={args.river_detail}, extent={tuple(round(value, 6) for value in extent)})"
+        f"river_detail={args.river_detail}, "
+        f"levee={0 if routing_overlays is None else len(routing_overlays.levee_segments)}, "
+        f"bifurcations={0 if routing_overlays is None else len(routing_overlays.bifurcation_segments)}, "
+        f"extent={tuple(round(value, 6) for value in extent)})"
     )
 
 
 def evaluation_output(evaluation_name: str) -> Path:
-    return OUTPUT_ROOT / f"{evaluation_name}_dams_rivers_metric_diff.png"
+    return OUTPUT_ROOT / f"{evaluation_name}_metric_diff__openbench_map.png"
 
 
 def evaluation_output_dir(evaluation_name: str) -> Path:
     return OUTPUT_ROOT / evaluation_name
+
+
+def _layer_output_tag(args: argparse.Namespace) -> str:
+    layers = []
+    if args.show_dams:
+        layers.append("dam")
+    if args.show_levee:
+        layers.append("levee")
+    if args.show_bifurcations:
+        layers.append("bifurcation")
+    return "_".join(layers) if layers else "base"
+
+
+def _with_overlay_suffix(path: Path, args: argparse.Namespace) -> Path:
+    return path.with_name(f"{path.stem}__{_layer_output_tag(args)}{path.suffix}")
+
+
+def _layer_groups_from_argv(argv: list[str]) -> tuple[frozenset[str], ...]:
+    """Keep CLI layer-token boundaries so separate switches render separately."""
+    long_switches = {
+        "--show-dams": "D",
+        "--show-levee": "L",
+        "--show-bifurcations": "B",
+    }
+    groups: list[frozenset[str]] = []
+    for token in argv:
+        if re.fullmatch(r"-[DLB]+", token):
+            group = frozenset(token[1:])
+        elif token in long_switches:
+            group = frozenset((long_switches[token],))
+        else:
+            continue
+        if group not in groups:
+            groups.append(group)
+    return tuple(groups) if groups else (frozenset(),)
+
+
+def _args_for_layer_group(
+    args: argparse.Namespace, group: frozenset[str]
+) -> argparse.Namespace:
+    grouped = argparse.Namespace(**vars(args))
+    grouped.show_dams = "D" in group
+    grouped.show_levee = "L" in group
+    grouped.show_bifurcations = "B" in group
+    return grouped
 
 
 def parse_args() -> argparse.Namespace:
@@ -1262,8 +1605,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--evaluation-name",
-        default=EVALUATION_NAME,
-        help=f"OpenBench evaluation name used to derive defaults (default: {EVALUATION_NAME}).",
+        help=(
+            "OpenBench evaluation name used to derive defaults; when an input path is "
+            f"provided, it is inferred from run_manifest.json (fallback: {EVALUATION_NAME})."
+        ),
     )
     parser.add_argument(
         "--input-suffix",
@@ -1353,6 +1698,27 @@ def parse_args() -> argparse.Namespace:
         help=f"River detail level (default: {DEFAULT_RIVER_DETAIL}).",
     )
     parser.add_argument(
+        "-D",
+        "--show-dams",
+        action="store_true",
+        help=(
+            "Overlay dams; combine letters in one token to merge layers (-DLB), or "
+            "write switches separately to render separate maps (-D -L -B)."
+        ),
+    )
+    parser.add_argument(
+        "-L",
+        "--show-levee",
+        action="store_true",
+        help="Overlay valid levee segments colored by protected floodplain fraction (0–100%%).",
+    )
+    parser.add_argument(
+        "-B",
+        "--show-bifurcations",
+        action="store_true",
+        help="Overlay CoLM bifurcation endpoint paths in red.",
+    )
+    parser.add_argument(
         "--color-limit",
         "--kge-limit",
         dest="color_limit",
@@ -1382,14 +1748,52 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Output DPI override; by default the corresponding OpenBench plotting YAML is used.",
     )
+    parser.add_argument(
+        "-j",
+        "--workers",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Parallel rendering processes for batch mode (default: 1).",
+    )
     args = parser.parse_args()
+    args.layer_groups = _layer_groups_from_argv(sys.argv[1:])
+    if args.workers < 1:
+        parser.error("-j/--workers must be at least 1")
+    output_was_explicit = args.output is not None
+    args.output_was_explicit = output_was_explicit
+    if output_was_explicit and args.evaluation is not None and len(args.layer_groups) > 1:
+        parser.error(
+            "--output cannot be used with separate layer switches because multiple maps "
+            "would share one filename; combine the switches (for example -DLB) or use "
+            "--output-dir"
+        )
+    dam_year_filter_requested = (
+        args.dam_built_before is not None
+        or args.dam_built_by is not None
+        or args.all_dam_years
+    )
+    if dam_year_filter_requested and not args.show_dams:
+        parser.error("dam-year options require -D/--show-dams")
+    input_path = args.evaluation if args.evaluation is not None else args.evaluation_dir
+    if args.evaluation_name is None:
+        args.evaluation_name = (
+            _evaluation_name_from_input(input_path)
+            if input_path is not None
+            else EVALUATION_NAME
+        )
     if args.evaluation is None and args.evaluation_dir is None:
         args.evaluation_dir = openbench_input_dir(args.evaluation_name, args.input_suffix)
     if args.output is None:
         args.output = evaluation_output(args.evaluation_name)
     if args.output_dir is None:
         args.output_dir = evaluation_output_dir(args.evaluation_name)
-    if args.dam_built_before is None and args.dam_built_by is None and not args.all_dam_years:
+    if (
+        args.show_dams
+        and args.dam_built_before is None
+        and args.dam_built_by is None
+        and not args.all_dam_years
+    ):
         input_path = args.evaluation if args.evaluation is not None else args.evaluation_dir
         manifest_year, manifest_path = dam_built_before_from_manifest(input_path)
         if manifest_year is not None:
@@ -1462,11 +1866,11 @@ def _attach_station_coordinates(evaluation: pd.DataFrame, path: Path, value_colu
 
 def read_inputs(
     evaluation_path: Path,
-    dam_path: Path,
+    dam_path: Path | None,
     requested_value_column: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, str]:
     evaluation = pd.read_csv(evaluation_path, dtype={"ID": "string"})
-    dams = pd.read_csv(dam_path)
+    dams = read_dams(dam_path) if dam_path is not None else empty_dams()
     evaluation = _attach_station_coordinates(evaluation, evaluation_path, requested_value_column)
 
     value_column = requested_value_column
@@ -1499,7 +1903,7 @@ def read_inputs(
     dams = dams.dropna(subset=["lon", "lat"])
     if evaluation.empty:
         raise ValueError("No valid evaluation stations remain after filtering.")
-    if dams.empty:
+    if dam_path is not None and dams.empty:
         raise ValueError("No valid dams remain after filtering.")
     return evaluation, dams, value_column
 
@@ -1662,7 +2066,7 @@ def prepare_basin_layer(
     else:
         if not routing_file.exists():
             raise FileNotFoundError(f"Routing file not found: {routing_file}")
-        with h5py.File(routing_file, "r") as h5:
+        with open_netcdf(routing_file) as h5:
             sequence_raw = routing_numeric_1d(h5, "seq")
             next_raw = routing_numeric_1d(h5, "seq_next")
             longitude_raw = routing_numeric_1d(h5, "seq_lon")
@@ -1788,11 +2192,22 @@ def plot_combined_map(
     dam_year_filter_label: str | None = None,
     basin_layer: dict[str, object] | None = None,
     basin_mask: BasinMask | None = None,
+    routing_overlays: RoutingOverlayLayers | None = None,
+    show_dams: bool = False,
 ) -> None:
     option = style.option
     matplotlib.rc("font", family=option["font"])
     projection = ccrs.PlateCarree()
-    fig = plt.figure(figsize=(float(option["x_wise"]), float(option["y_wise"])))
+    has_year_colorbar = not dams.empty and bool(dams["year"].between(1800, 2030).any())
+    has_levee_colorbar = routing_overlays is not None and bool(len(routing_overlays.levee_segments))
+    layout = _resolve_map_layout(extent, option, has_year_colorbar, has_levee_colorbar)
+    fig = plt.figure(figsize=layout.figure_size)
+    fig.subplots_adjust(
+        left=layout.subplot_left,
+        right=layout.subplot_right,
+        bottom=layout.subplot_bottom,
+        top=layout.subplot_top,
+    )
     ax = fig.add_subplot(1, 1, 1, projection=projection)
     ax.set_extent(extent, crs=projection)
 
@@ -1818,6 +2233,7 @@ def plot_combined_map(
             alpha=0.85,
             zorder=2,
         )
+    levee_lines = _draw_routing_overlays(ax, routing_overlays, projection)
     ax.add_feature(cfeature.BORDERS.with_scale("50m"), edgecolor="0.48", linewidth=0.45, zorder=3)
     ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="0.25", linewidth=0.7, zorder=3)
 
@@ -1864,7 +2280,7 @@ def plot_combined_map(
             year_min = float(dams.loc[valid_year, "year"].min())
             year_max = float(dams.loc[valid_year, "year"].max())
             year_norm = Normalize(vmin=year_min, vmax=year_max)
-            for lower, upper, marker, _ in DAM_STORAGE_CLASSES:
+            for lower, upper, edgecolor, _ in DAM_STORAGE_CLASSES:
                 selected = (
                     valid_year.to_numpy()
                     & (storage_values >= lower)
@@ -1879,8 +2295,8 @@ def plot_combined_map(
                     s=dam_sizes[selected],
                     cmap="viridis",
                     norm=year_norm,
-                    marker=marker,
-                    edgecolors="black",
+                    marker="^",
+                    edgecolors=edgecolor,
                     linewidths=0.7,
                     alpha=0.96,
                     transform=projection,
@@ -1889,7 +2305,7 @@ def plot_combined_map(
                 if year_points is None:
                     year_points = points
         invalid_year = (~valid_year).to_numpy()
-        for lower, upper, marker, _ in DAM_STORAGE_CLASSES:
+        for lower, upper, edgecolor, _ in DAM_STORAGE_CLASSES:
             selected = (
                 invalid_year
                 & (storage_values >= lower)
@@ -1901,26 +2317,20 @@ def plot_combined_map(
                     dams.loc[selected, "lat"],
                     s=dam_sizes[selected],
                     color="0.65",
-                    marker=marker,
-                    edgecolors="black",
+                    marker="^",
+                    edgecolors=edgecolor,
                     linewidths=0.7,
                     transform=projection,
                     zorder=4,
                 )
 
+    fig.canvas.draw()
     if year_points is not None:
-        year_bar = fig.colorbar(
-            year_points,
-            ax=ax,
-            orientation="horizontal",
-            pad=0.08,
-            shrink=0.67,
-            aspect=30,
-        )
-        year_bar.set_label("Dam construction year", fontsize=11)
-        year_bar.ax.tick_params(labelsize=9)
+        _add_year_colorbar(fig, ax, year_points, layout)
 
-    _add_openbench_colorbar(fig, ax, station_points, style)
+    _add_openbench_colorbar(fig, ax, station_points, style, layout)
+    if levee_lines is not None:
+        _add_levee_colorbar(fig, ax, levee_lines, layout, year_points is not None)
 
     legend_handles = [
         Line2D(
@@ -1944,6 +2354,7 @@ def plot_combined_map(
                 label=f"River network ({river_detail})",
             )
         )
+    _add_routing_overlay_legend(legend_handles, routing_overlays)
     if basin_layer is not None:
         legend_handles.insert(
             0,
@@ -1966,28 +2377,32 @@ def plot_combined_map(
             ),
         )
     if not dams.empty:
-        for _, _, marker, label in DAM_STORAGE_CLASSES:
+        for _, _, edgecolor, label in DAM_STORAGE_CLASSES:
             legend_handles.append(
                 Line2D(
                     [],
                     [],
-                    marker=marker,
+                    marker="^",
                     linestyle="none",
                     markerfacecolor="#5ec962",
-                    markeredgecolor="black",
+                    markeredgecolor=edgecolor,
                     markersize=8,
                     label=label,
                 )
             )
-    ax.legend(
+    fig.legend(
         handles=legend_handles,
-        loc="lower left",
+        loc="center left",
+        bbox_to_anchor=(
+            layout.legend_left,
+            (layout.subplot_bottom + layout.subplot_top) / 2.0,
+        ),
         frameon=True,
         framealpha=0.94,
         facecolor="white",
         edgecolor="0.7",
         fontsize=8.8,
-        title="Map layers and dam-size scale",
+        title="Map layers and dam-storage classes" if not dams.empty else "Map layers",
         title_fontsize=9.2,
         borderpad=0.7,
     )
@@ -1996,19 +2411,27 @@ def plot_combined_map(
     ax.set_ylabel(str(option.get("yticklabel", "")), fontsize=float(option["ytick"]) + 1)
     ax.set_title(
         style.title,
-        fontsize=float(option["title_size"]),
+        fontsize=min(float(option["title_size"]), 15.0),
         fontweight="bold",
         pad=14,
     )
-    fig.text(
-        0.5,
-        0.045,
-        f"Additional layers — Triangles: dams "
-        f"(n={len(dams)}, size = log-scaled total storage)",
-        ha="center",
-        fontsize=9.5,
-        color="0.3",
-    )
+    summary_parts = []
+    if show_dams:
+        summary_parts.append(
+            f"dams: {len(dams):,} (triangles, log-scaled total storage)"
+        )
+    overlay_summary = _routing_overlay_summary(routing_overlays).removeprefix("  |  ")
+    if overlay_summary:
+        summary_parts.append(overlay_summary)
+    if summary_parts:
+        fig.text(
+            0.5,
+            0.012,
+            f"Additional layers — {'  |  '.join(summary_parts)}",
+            ha="center",
+            fontsize=9.5,
+            color="0.3",
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor="white")
@@ -2023,8 +2446,11 @@ def render_one(
     shared_extent: tuple[float, float, float, float] | None = None,
     basin_layer: dict[str, object] | None = None,
     basin_mask: BasinMask | None = None,
+    routing_overlays: RoutingOverlayLayers | None = None,
 ) -> None:
-    evaluation, dams, value_column = read_inputs(evaluation_path, args.dams, value_column)
+    evaluation, dams, value_column = read_inputs(
+        evaluation_path, args.dams if args.show_dams else None, value_column
+    )
     if basin_mask is not None:
         evaluation = filter_points_to_basin(evaluation, basin_mask)
         if evaluation.empty:
@@ -2032,14 +2458,16 @@ def render_one(
                 f"No evaluation stations remain inside basin mask {basin_mask.path}."
             )
     extent = shared_extent or automatic_extent(evaluation["lon"], evaluation["lat"])
-    dams, dam_year_filter_label = filter_dams_by_year(
-        dams,
-        args.dam_built_before,
-        args.dam_built_by,
-    )
-    dams = filter_dams_to_extent(dams, extent)
-    if basin_mask is not None:
-        dams = filter_points_to_basin(dams, basin_mask)
+    dam_year_filter_label = None
+    if args.show_dams:
+        dams, dam_year_filter_label = filter_dams_by_year(
+            dams,
+            args.dam_built_before,
+            args.dam_built_by,
+        )
+        dams = filter_dams_to_extent(dams, extent)
+        if basin_mask is not None:
+            dams = filter_points_to_basin(dams, basin_mask)
     metadata = infer_result_metadata(evaluation_path, value_column, {}, "station")
     style = resolve_openbench_plot_style(evaluation[value_column].to_numpy(float), metadata, args)
     style = _add_overlay_title(
@@ -2061,13 +2489,63 @@ def render_one(
         dam_year_filter_label,
         basin_layer,
         basin_mask,
+        routing_overlays,
+        args.show_dams,
     )
     print(
         f"Wrote {output_path} "
         f"(metric={value_column}, product={metadata.product_type}, stations={len(evaluation)}, dams={len(dams)}, "
         f"river_detail={args.river_detail}, region={infer_region_name(evaluation_path, args.region_name) or 'unspecified'}, "
+        f"levee={0 if routing_overlays is None else len(routing_overlays.levee_segments)}, "
+        f"bifurcations={0 if routing_overlays is None else len(routing_overlays.bifurcation_segments)}, "
         f"extent={tuple(round(value, 6) for value in extent)})"
     )
+
+
+def _render_station_worker(task: tuple[Path, Path, str]) -> str | None:
+    if _STATION_WORKER_CONTEXT is None:
+        raise RuntimeError("Station worker context was not initialized.")
+    args, shared_extent, basin_layer, basin_mask, routing_overlays = (
+        _STATION_WORKER_CONTEXT
+    )
+    path, output_path, metric = task
+    try:
+        render_one(
+            path,
+            output_path,
+            args,
+            metric,
+            shared_extent,
+            basin_layer,
+            basin_mask,
+            routing_overlays,
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        return str(exc)
+    return None
+
+
+def _render_grid_worker(task: tuple[Path, Path]) -> str | None:
+    if _GRID_WORKER_CONTEXT is None:
+        raise RuntimeError("Grid worker context was not initialized.")
+    args, dams, extent, basin_mask, river_network, routing_overlays = (
+        _GRID_WORKER_CONTEXT
+    )
+    path, output_path = task
+    try:
+        render_grid_file(
+            path,
+            output_path,
+            args,
+            dams,
+            extent,
+            basin_mask,
+            river_network,
+            routing_overlays,
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        return str(exc)
+    return None
 
 
 def station_metric_columns(
@@ -2141,6 +2619,7 @@ def process_station_files(
     args: argparse.Namespace,
     manual_extent: tuple[float, float, float, float] | None,
     skip_errors: bool,
+    routing_overlay_source: RoutingOverlaySource | None = None,
 ) -> tuple[int, int]:
     tasks: list[tuple[Path, Path, str]] = []
     skipped = 0
@@ -2164,8 +2643,9 @@ def process_station_files(
                 safe_metric = re.sub(r"[^A-Za-z0-9_.-]+", "_", result_tag).strip("_")
                 metric_output = (
                     output_path.parent
-                    / f"{path.stem}__{safe_metric}__dams_rivers.png"
+                    / f"{path.stem}__{safe_metric}__openbench_map.png"
                 )
+                metric_output = _with_overlay_suffix(metric_output, args)
             else:
                 metric_output = output_path
             tasks.append((path, metric_output, metric))
@@ -2202,25 +2682,55 @@ def process_station_files(
             list(dict.fromkeys((path, metric) for path, _, metric in tasks))
         )
     )
+    routing_overlays = select_openbench_routing_overlays(
+        routing_overlay_source, shared_extent, basin_mask, args
+    )
 
     completed = 0
-    for path, output_path, metric in tasks:
+    if skip_errors and args.workers > 1 and len(tasks) > 1:
+        global _STATION_WORKER_CONTEXT
+        _STATION_WORKER_CONTEXT = (
+            args,
+            shared_extent,
+            basin_layer,
+            basin_mask,
+            routing_overlays,
+        )
+        worker_count = min(args.workers, len(tasks))
+        print(f"Rendering {len(tasks)} station maps with {worker_count} processes.")
         try:
-            render_one(
-                path,
-                output_path,
-                args,
-                metric,
-                shared_extent,
-                basin_layer,
-                basin_mask,
-            )
-            completed += 1
-        except (OSError, ValueError, KeyError) as exc:
-            if not skip_errors:
-                raise
-            skipped += 1
-            print(f"Skipping station candidate {path}: {exc}")
+            with ProcessPoolExecutor(
+                max_workers=worker_count,
+                mp_context=multiprocessing.get_context("fork"),
+            ) as executor:
+                errors = executor.map(_render_station_worker, tasks, chunksize=1)
+                for (path, _, _), error in zip(tasks, errors):
+                    if error is None:
+                        completed += 1
+                    else:
+                        skipped += 1
+                        print(f"Skipping station candidate {path}: {error}")
+        finally:
+            _STATION_WORKER_CONTEXT = None
+    else:
+        for path, output_path, metric in tasks:
+            try:
+                render_one(
+                    path,
+                    output_path,
+                    args,
+                    metric,
+                    shared_extent,
+                    basin_layer,
+                    basin_mask,
+                    routing_overlays,
+                )
+                completed += 1
+            except (OSError, ValueError, KeyError) as exc:
+                if not skip_errors:
+                    raise
+                skipped += 1
+                print(f"Skipping station candidate {path}: {exc}")
     return completed, skipped
 
 
@@ -2230,6 +2740,7 @@ def process_grid_files(
     args: argparse.Namespace,
     manual_extent: tuple[float, float, float, float] | None,
     skip_errors: bool,
+    routing_overlay_source: RoutingOverlaySource | None = None,
 ) -> tuple[int, int]:
     valid_pairs: list[tuple[Path, Path]] = []
     skipped = 0
@@ -2244,7 +2755,8 @@ def process_grid_files(
                     (metadata.measure_type, metadata.product_type, metadata.measure)
                 )
                 safe_tag = re.sub(r"[^A-Za-z0-9_.-]+", "_", result_tag).strip("_")
-                output_path = output_path.parent / f"{path.stem}__{safe_tag}__dams_rivers.png"
+                output_path = output_path.parent / f"{path.stem}__{safe_tag}__openbench_map.png"
+                output_path = _with_overlay_suffix(output_path, args)
             valid_pairs.append((path, output_path))
         except (OSError, ValueError, KeyError) as exc:
             if not skip_errors:
@@ -2282,19 +2794,50 @@ def process_grid_files(
     river_network = load_river_network(
         args.routing_file, args.river_detail, extent, basin_mask
     )
-    dams = read_dams(args.dams)
+    routing_overlays = select_openbench_routing_overlays(
+        routing_overlay_source, extent, basin_mask, args
+    )
+    dams = read_dams(args.dams) if args.show_dams else empty_dams()
     completed = 0
-    for path, output_path in valid_pairs:
+    if skip_errors and args.workers > 1 and len(valid_pairs) > 1:
+        global _GRID_WORKER_CONTEXT
+        _GRID_WORKER_CONTEXT = (
+            args,
+            dams,
+            extent,
+            basin_mask,
+            river_network,
+            routing_overlays,
+        )
+        worker_count = min(args.workers, len(valid_pairs))
+        print(f"Rendering {len(valid_pairs)} grid maps with {worker_count} processes.")
         try:
-            render_grid_file(
-                path, output_path, args, dams, extent, basin_mask, river_network
-            )
-            completed += 1
-        except (OSError, ValueError, KeyError) as exc:
-            if not skip_errors:
-                raise
-            skipped += 1
-            print(f"Skipping grid candidate {path}: {exc}")
+            with ProcessPoolExecutor(
+                max_workers=worker_count,
+                mp_context=multiprocessing.get_context("fork"),
+            ) as executor:
+                errors = executor.map(_render_grid_worker, valid_pairs, chunksize=1)
+                for (path, _), error in zip(valid_pairs, errors):
+                    if error is None:
+                        completed += 1
+                    else:
+                        skipped += 1
+                        print(f"Skipping grid candidate {path}: {error}")
+        finally:
+            _GRID_WORKER_CONTEXT = None
+    else:
+        for path, output_path in valid_pairs:
+            try:
+                render_grid_file(
+                    path, output_path, args, dams, extent, basin_mask, river_network,
+                    routing_overlays,
+                )
+                completed += 1
+            except (OSError, ValueError, KeyError) as exc:
+                if not skip_errors:
+                    raise
+                skipped += 1
+                print(f"Skipping grid candidate {path}: {exc}")
     return completed, skipped
 
 
@@ -2305,19 +2848,44 @@ def main() -> None:
     region_name = args.region_name or region_name_from_evaluation(args.evaluation_name)
     print(f"OpenBench evaluation: {args.evaluation_name} (region={region_name})")
     manual_extent = validate_extent(tuple(args.extent)) if args.extent is not None else None
+    routing_overlay_source = None
+    if args.show_levee or args.show_bifurcations:
+        routing_overlay_source = load_routing_overlay_source(
+            args.routing_file,
+            load_levee=args.show_levee,
+            load_bifurcations=args.show_bifurcations,
+        )
+        print(
+            f"Loaded requested routing overlays once from {args.routing_file} "
+            f"(routing_units={len(routing_overlay_source.longitude):,})."
+        )
 
     if args.evaluation_dir is None:
         path = args.evaluation
         suffix = path.suffix.lower()
-        if suffix == ".csv":
-            process_station_files([path], [args.output], args, manual_extent, False)
-        elif suffix in {".nc", ".nc4", ".netcdf"}:
-            process_grid_files([path], [args.output], args, manual_extent, False)
-        else:
-            raise ValueError(
-                f"Cannot identify input type from extension {path.suffix!r}; "
-                "expected a station CSV or grid NetCDF."
+        for group in args.layer_groups:
+            group_args = _args_for_layer_group(args, group)
+            output_path = (
+                args.output
+                if args.output_was_explicit
+                else _with_overlay_suffix(args.output, group_args)
             )
+            print(f"Rendering layer group: {_layer_output_tag(group_args)}")
+            if suffix == ".csv":
+                process_station_files(
+                    [path], [output_path], group_args, manual_extent, False,
+                    routing_overlay_source,
+                )
+            elif suffix in {".nc", ".nc4", ".netcdf"}:
+                process_grid_files(
+                    [path], [output_path], group_args, manual_extent, False,
+                    routing_overlay_source,
+                )
+            else:
+                raise ValueError(
+                    f"Cannot identify input type from extension {path.suffix!r}; "
+                    "expected a station CSV or grid NetCDF."
+                )
         return
 
     station_paths = sorted(args.evaluation_dir.glob(args.station_pattern))
@@ -2330,18 +2898,38 @@ def main() -> None:
 
     station_dir = args.output_dir / "station"
     grid_dir = args.output_dir / "grid"
-    station_outputs = [
-        station_dir / f"{path.stem}__dams_rivers.png" for path in station_paths
-    ]
-    grid_outputs = [grid_dir / f"{path.stem}__dams_rivers.png" for path in grid_paths]
-    station_completed, station_skipped = process_station_files(
-        station_paths, station_outputs, args, manual_extent, True
-    )
-    grid_completed, grid_skipped = process_grid_files(
-        grid_paths, grid_outputs, args, manual_extent, True
-    )
+    station_completed = station_skipped = 0
+    grid_completed = grid_skipped = 0
+    for group in args.layer_groups:
+        group_args = _args_for_layer_group(args, group)
+        print(f"Rendering layer group: {_layer_output_tag(group_args)}")
+        station_outputs = [
+            _with_overlay_suffix(
+                station_dir / f"{path.stem}__openbench_map.png", group_args
+            )
+            for path in station_paths
+        ]
+        grid_outputs = [
+            _with_overlay_suffix(
+                grid_dir / f"{path.stem}__openbench_map.png", group_args
+            )
+            for path in grid_paths
+        ]
+        completed, skipped = process_station_files(
+            station_paths, station_outputs, group_args, manual_extent, True,
+            routing_overlay_source,
+        )
+        station_completed += completed
+        station_skipped += skipped
+        completed, skipped = process_grid_files(
+            grid_paths, grid_outputs, group_args, manual_extent, True,
+            routing_overlay_source,
+        )
+        grid_completed += completed
+        grid_skipped += skipped
     print(
         "Completed mixed OpenBench plotting: "
+        f"layer_groups={len(args.layer_groups)}, "
         f"station={station_completed}, grid={grid_completed}, "
         f"skipped={station_skipped + grid_skipped}, output={args.output_dir}"
     )
