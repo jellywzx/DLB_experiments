@@ -55,6 +55,24 @@
         --evaluation-name Amazon_inundation_D \
         -L
 
+7. 高亮 ``GRAND_ID=5117`` 水坝的下游主河道和分汊路径：
+
+    python plot_openbench_dams_rivers.py \
+        --evaluation /path/to/result.nc \
+        -D --dam-id 5117
+
+8. 仅显示该坝下游路径100 km范围内的站点或网格结果：
+
+    python plot_openbench_dams_rivers.py \
+        --evaluation /path/to/result.nc \
+        -D --dam-id 5117 --dam-impact-mode mask --dam-buffer-km 100
+
+9. 高亮当前地图中全部可见水坝的合并下游路径：
+
+    python plot_openbench_dams_rivers.py \
+        --evaluation /path/to/result.nc \
+        -D --dam-id all
+
 未显式指定 ``--output`` 时，文件名使用 ``__openbench_map__base`` 或按
 Dam、Levee、Bifurcation 的固定顺序追加图层标签，例如
 ``__openbench_map__dam_levee_bifurcation``。显式指定 ``--output`` 时不会
@@ -65,6 +83,10 @@ Dam、Levee、Bifurcation 的固定顺序追加图层标签，例如
 存在标准流域掩膜时，堤防和分汊线段只有在两个端点均位于流域内时才会绘制；
 没有流域掩膜时按地图范围裁剪。使用 ``--routing-file`` 可指定路由文件。
 如需指定指标列、地图范围、河网精度、水坝年份或关闭流域边界，可使用相应参数。
+使用 ``--dam-id GRAND_ID`` 可高亮指定水坝的完整下游连通路径；重复该参数可选择
+多座水坝。增加 ``--dam-impact-mode mask --dam-buffer-km 50`` 时，仅保留距离这些
+下游路径50 km以内的站点或网格结果。使用 ``-D --dam-id all`` 时，自动追踪经过
+建设年份、地图范围和流域掩膜筛选后全部可见水坝的下游路径。
 查看全部参数及默认值：
 
     python plot_openbench_dams_rivers.py --help
@@ -269,6 +291,17 @@ class RiverNetwork:
             return "CoLM river network (all)"
         threshold = f"{self.minimum_uparea_km2:,.0f}"
         return f"CoLM river network ({self.detail}, ≥{threshold} km²)"
+
+
+@dataclass(frozen=True)
+class DamInfluence:
+    segments: np.ndarray
+    longitude: np.ndarray
+    latitude: np.ndarray
+    dam_ids: tuple[str, ...]
+    dam_sequences: tuple[int, ...]
+    buffer_km: float
+    mask_results: bool
 
 
 @dataclass(frozen=True)
@@ -1089,10 +1122,227 @@ def read_dams(path: Path) -> pd.DataFrame:
     dams = dams.copy()
     for column in required:
         dams[column] = pd.to_numeric(dams[column], errors="coerce")
+    if "seq" in dams.columns:
+        dams["seq"] = pd.to_numeric(dams["seq"], errors="coerce")
     dams = dams.dropna(subset=["lon", "lat"])
     if dams.empty:
         raise ValueError("No valid dams remain after filtering invalid coordinates.")
     return dams
+
+
+def _normalized_dam_id(value: object) -> str:
+    text = str(value).strip()
+    if text.lower() == "all":
+        return "all"
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    return str(int(number)) if np.isfinite(number) and number.is_integer() else text
+
+
+def filter_dams_by_ids(dams: pd.DataFrame, dam_ids: tuple[str, ...]) -> pd.DataFrame:
+    if not dam_ids or dam_ids == ("all",):
+        return dams
+    if "GRAND_ID" not in dams.columns:
+        raise ValueError("Dam CSV must contain GRAND_ID when --dam-id is used.")
+    requested = set(dam_ids)
+    normalized = dams["GRAND_ID"].map(_normalized_dam_id)
+    selected = dams.loc[normalized.isin(requested)].copy()
+    found = set(normalized.loc[selected.index])
+    missing = sorted(requested.difference(found))
+    if missing:
+        raise ValueError(f"Requested dam GRAND_ID values were not found: {missing}")
+    return selected
+
+
+def build_all_visible_dam_influence(
+    args: argparse.Namespace,
+    extent: tuple[float, float, float, float],
+    basin_mask: BasinMask | None,
+) -> DamInfluence:
+    """Build the union of downstream paths for every dam visible on this map."""
+    dams = read_dams(args.dams)
+    dams, _ = filter_dams_by_year(
+        dams,
+        args.dam_built_before,
+        args.dam_built_by,
+    )
+    dams = filter_dams_to_extent(dams, extent)
+    if basin_mask is not None:
+        dams = filter_points_to_basin(dams, basin_mask)
+    if dams.empty:
+        raise ValueError(
+            "--dam-id all found no visible dams after year, extent, and basin filtering."
+        )
+    if "GRAND_ID" not in dams.columns:
+        raise ValueError("Dam CSV must contain GRAND_ID when --dam-id all is used.")
+    dam_ids = tuple(dict.fromkeys(dams["GRAND_ID"].map(_normalized_dam_id)))
+    print(f"Selected all visible dams for downstream tracing: {len(dam_ids):,} dams.")
+    return build_dam_influence(
+        args.routing_file,
+        args.dams,
+        dam_ids,
+        args.dam_buffer_km,
+        args.dam_impact_mode == "mask",
+    )
+
+
+def build_dam_influence(
+    routing_path: Path,
+    dam_path: Path,
+    dam_ids: tuple[str, ...],
+    buffer_km: float,
+    mask_results: bool,
+) -> DamInfluence:
+    """Trace selected dams through main and bifurcating downstream routing edges."""
+    dams = filter_dams_by_ids(read_dams(dam_path), dam_ids)
+    if "seq" not in dams.columns or dams["seq"].isna().any():
+        raise ValueError("Selected dam records must contain valid seq routing IDs.")
+
+    with open_netcdf(routing_path) as h5:
+        sequence_raw = routing_numeric_1d(h5, "seq")
+        next_raw = routing_numeric_1d(h5, "seq_next")
+        longitude = routing_numeric_1d(h5, "seq_lon")
+        latitude = routing_numeric_1d(h5, "seq_lat")
+        bifurcation_upstream = routing_numeric_1d(h5, "bifurcation_upst")
+        bifurcation_downstream = routing_numeric_1d(h5, "bifurcation_down")
+    if len({len(sequence_raw), len(next_raw), len(longitude), len(latitude)}) != 1:
+        raise ValueError("Routing seq, seq_next, seq_lon, and seq_lat lengths differ.")
+
+    valid_sequence = np.isfinite(sequence_raw) & (sequence_raw > 0)
+    valid_indices = np.flatnonzero(valid_sequence)
+    sequence = sequence_raw[valid_indices].astype(np.int64)
+    order = np.argsort(sequence)
+    sorted_sequence = sequence[order]
+    if np.any(np.diff(sorted_sequence) == 0):
+        raise ValueError("Routing seq contains duplicate positive IDs.")
+    sorted_indices = valid_indices[order]
+
+    def indices_for_ids(values: np.ndarray) -> np.ndarray:
+        result = np.full(len(values), -1, dtype=np.int64)
+        finite = np.flatnonzero(np.isfinite(values) & (values > 0))
+        if finite.size == 0:
+            return result
+        ids = values[finite].astype(np.int64)
+        positions = np.searchsorted(sorted_sequence, ids)
+        in_range = positions < len(sorted_sequence)
+        finite = finite[in_range]
+        ids = ids[in_range]
+        positions = positions[in_range]
+        matched = sorted_sequence[positions] == ids
+        result[finite[matched]] = sorted_indices[positions[matched]]
+        return result
+
+    destination = indices_for_ids(next_raw)
+    bifurcation_sources = indices_for_ids(bifurcation_upstream)
+    bifurcation_destinations = indices_for_ids(bifurcation_downstream)
+    valid_bifurcations = (
+        (bifurcation_sources >= 0)
+        & (bifurcation_destinations >= 0)
+        & (bifurcation_sources != bifurcation_destinations)
+    )
+    bifurcation_sources = bifurcation_sources[valid_bifurcations]
+    bifurcation_destinations = bifurcation_destinations[valid_bifurcations]
+    bifurcation_order = np.argsort(bifurcation_sources)
+    sorted_bifurcation_sources = bifurcation_sources[bifurcation_order]
+    sorted_bifurcation_destinations = bifurcation_destinations[bifurcation_order]
+
+    dam_sequences = tuple(int(value) for value in dams["seq"].to_numpy(float))
+    dam_indices = indices_for_ids(np.asarray(dam_sequences, dtype=float))
+    if np.any(dam_indices < 0):
+        missing = [dam_sequences[i] for i in np.flatnonzero(dam_indices < 0)]
+        raise ValueError(f"Selected dam seq values were not found in routing data: {missing}")
+
+    visited = np.zeros(len(sequence_raw), dtype=bool)
+    pending = deque(int(index) for index in dam_indices)
+    edge_sources: list[int] = []
+    edge_destinations: list[int] = []
+    while pending:
+        source = pending.popleft()
+        if visited[source]:
+            continue
+        visited[source] = True
+        targets: list[int] = []
+        main_target = int(destination[source])
+        if main_target >= 0 and main_target != source:
+            targets.append(main_target)
+        left = int(np.searchsorted(sorted_bifurcation_sources, source, side="left"))
+        right = int(np.searchsorted(sorted_bifurcation_sources, source, side="right"))
+        targets.extend(int(value) for value in sorted_bifurcation_destinations[left:right])
+        for target in dict.fromkeys(targets):
+            if not (
+                np.isfinite(longitude[source])
+                and np.isfinite(latitude[source])
+                and np.isfinite(longitude[target])
+                and np.isfinite(latitude[target])
+            ):
+                continue
+            if abs(float(longitude[source]) - float(longitude[target])) <= 180.0:
+                edge_sources.append(source)
+                edge_destinations.append(target)
+            if not visited[target]:
+                pending.append(target)
+
+    if not edge_sources:
+        raise ValueError("No downstream routing edges were found for the selected dams.")
+    edge_sources_array = np.asarray(edge_sources, dtype=np.int64)
+    edge_destinations_array = np.asarray(edge_destinations, dtype=np.int64)
+    segments = np.stack(
+        (
+            np.column_stack((longitude[edge_sources_array], latitude[edge_sources_array])),
+            np.column_stack((longitude[edge_destinations_array], latitude[edge_destinations_array])),
+        ),
+        axis=1,
+    )
+    path_indices = np.unique(np.concatenate((edge_sources_array, edge_destinations_array)))
+    influence = DamInfluence(
+        segments=segments,
+        longitude=longitude[path_indices],
+        latitude=latitude[path_indices],
+        dam_ids=dam_ids,
+        dam_sequences=dam_sequences,
+        buffer_km=buffer_km,
+        mask_results=mask_results,
+    )
+    print(
+        f"Built selected-dam downstream path: dams={dam_ids}, "
+        f"segments={len(segments):,}, nodes={len(path_indices):,}, "
+        f"mode={'mask' if mask_results else 'highlight'}, buffer={buffer_km:g} km."
+    )
+    return influence
+
+
+def points_inside_dam_corridor(
+    longitude: np.ndarray,
+    latitude: np.ndarray,
+    influence: DamInfluence,
+) -> np.ndarray:
+    """Select points within a great-circle buffer of downstream routing nodes."""
+    point_lon = np.asarray(longitude, dtype=float).reshape(-1)
+    point_lat = np.asarray(latitude, dtype=float).reshape(-1)
+    inside = np.zeros(len(point_lon), dtype=bool)
+    valid = np.isfinite(point_lon) & np.isfinite(point_lat)
+    valid_indices = np.flatnonzero(valid)
+    for start in range(0, len(valid_indices), 512):
+        indices = valid_indices[start : start + 512]
+        minimum = np.full(len(indices), np.inf)
+        for route_start in range(0, len(influence.longitude), 512):
+            route_slice = slice(route_start, route_start + 512)
+            lon1 = np.deg2rad(point_lon[indices])[:, None]
+            lat1 = np.deg2rad(point_lat[indices])[:, None]
+            lon2 = np.deg2rad(influence.longitude[route_slice])[None, :]
+            lat2 = np.deg2rad(influence.latitude[route_slice])[None, :]
+            delta_lon = (lon1 - lon2 + np.pi) % (2.0 * np.pi) - np.pi
+            delta_lat = lat1 - lat2
+            a = (
+                np.sin(delta_lat / 2.0) ** 2
+                + np.cos(lat1) * np.cos(lat2) * np.sin(delta_lon / 2.0) ** 2
+            )
+            distance = 6371.0088 * 2.0 * np.arcsin(np.minimum(1.0, np.sqrt(a)))
+            minimum = np.minimum(minimum, np.min(distance, axis=1))
+        inside[indices] = minimum <= influence.buffer_km
+    return inside.reshape(np.asarray(longitude).shape)
 
 
 def empty_dams() -> pd.DataFrame:
@@ -1241,6 +1491,35 @@ def _routing_overlay_summary(layers: RoutingOverlayLayers | None) -> str:
     return "  |  " + ", ".join(parts) if parts else ""
 
 
+def _draw_dam_influence(ax, influence: DamInfluence | None, projection) -> None:
+    if influence is None:
+        return
+    ax.add_collection(
+        LineCollection(
+            influence.segments,
+            colors="#d81b60",
+            linewidths=1.8,
+            alpha=0.95,
+            transform=projection,
+            zorder=4.2,
+        )
+    )
+
+
+def _add_dam_influence_legend(
+    legend_handles: list[object], influence: DamInfluence | None
+) -> None:
+    if influence is None:
+        return
+    label = (
+        f"Selected-dam downstream path ({len(influence.dam_ids):,} dams; "
+        f"{len(influence.segments):,} segments)"
+    )
+    if influence.mask_results:
+        label += f"; results within {influence.buffer_km:g} km"
+    legend_handles.append(Line2D([], [], color="#d81b60", linewidth=1.8, label=label))
+
+
 def plot_grid_map(
     grid: GridData,
     dams: pd.DataFrame,
@@ -1254,6 +1533,7 @@ def plot_grid_map(
     basin_mask: BasinMask | None,
     river_network: RiverNetwork | None,
     routing_overlays: RoutingOverlayLayers | None = None,
+    dam_influence: DamInfluence | None = None,
     show_dams: bool = False,
 ) -> None:
     option = style.option
@@ -1317,6 +1597,7 @@ def plot_grid_map(
             zorder=3,
         )
         ax.add_collection(river_lines)
+    _draw_dam_influence(ax, dam_influence, projection)
     levee_lines = _draw_routing_overlays(ax, routing_overlays, projection)
     ax.add_feature(cfeature.BORDERS.with_scale("50m"), edgecolor="0.35", linewidth=0.5, zorder=3)
     ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="0.2", linewidth=0.75, zorder=3)
@@ -1422,6 +1703,7 @@ def plot_grid_map(
             )
         )
     _add_routing_overlay_legend(legend_handles, routing_overlays)
+    _add_dam_influence_legend(legend_handles, dam_influence)
     if not dams.empty:
         for _, _, edgecolor, label in DAM_STORAGE_CLASSES:
             legend_handles.append(
@@ -1471,6 +1753,11 @@ def plot_grid_map(
         summary_parts.append(
             f"dams: {len(dams):,} (triangles, log-scaled total storage)"
         )
+    if dam_influence is not None:
+        summary_parts.append(
+            f"selected-dam downstream path: {len(dam_influence.dam_ids):,} dams, "
+            f"{len(dam_influence.segments):,} segments"
+        )
     overlay_summary = _routing_overlay_summary(routing_overlays).removeprefix("  |  ")
     if overlay_summary:
         summary_parts.append(overlay_summary)
@@ -1497,15 +1784,28 @@ def render_grid_file(
     basin_mask: BasinMask | None,
     river_network: RiverNetwork | None,
     routing_overlays: RoutingOverlayLayers | None = None,
+    dam_influence: DamInfluence | None = None,
 ) -> None:
     grid = read_grid(grid_path, args.value_variable)
     if basin_mask is not None:
         grid = apply_basin_mask(grid, basin_mask)
+    if dam_influence is not None and dam_influence.mask_results:
+        grid_lon, grid_lat = np.meshgrid(grid.longitude, grid.latitude)
+        inside = points_inside_dam_corridor(grid_lon, grid_lat, dam_influence)
+        values = np.asarray(grid.values, dtype=float).copy()
+        values[~inside] = np.nan
+        if not np.isfinite(values).any():
+            raise ValueError(
+                f"No finite grid values remain within {dam_influence.buffer_km:g} km "
+                "of the selected-dam downstream path."
+            )
+        grid = GridData(grid.longitude, grid.latitude, values, grid.variable, grid.attrs)
     visible_dams = empty_dams()
     dam_year_filter_label = None
     if args.show_dams:
+        visible_dams = filter_dams_by_ids(dams, args.dam_ids)
         visible_dams, dam_year_filter_label = filter_dams_by_year(
-            dams,
+            visible_dams,
             args.dam_built_before,
             args.dam_built_by,
         )
@@ -1532,6 +1832,7 @@ def render_grid_file(
         basin_mask,
         river_network,
         routing_overlays,
+        dam_influence,
         args.show_dams,
     )
     valid_count = int(np.isfinite(grid.values).sum())
@@ -1562,6 +1863,11 @@ def _layer_output_tag(args: argparse.Namespace) -> str:
         layers.append("levee")
     if args.show_bifurcations:
         layers.append("bifurcation")
+    if getattr(args, "dam_ids", ()):
+        identifier = "-".join(args.dam_ids)
+        mode = "corridor" if args.dam_impact_mode == "mask" else "path"
+        prefix = "" if args.show_dams else "dam_"
+        layers.append(f"{prefix}{mode}_{identifier}")
     return "_".join(layers) if layers else "base"
 
 
@@ -1719,6 +2025,33 @@ def parse_args() -> argparse.Namespace:
         help="Overlay CoLM bifurcation endpoint paths in red.",
     )
     parser.add_argument(
+        "--dam-id",
+        dest="dam_ids",
+        action="append",
+        metavar="GRAND_ID",
+        help=(
+            "Select a dam by GRAND_ID and trace its downstream routing path; repeat "
+            "the option to combine multiple dams, or use 'all' with -D for every "
+            "visible dam."
+        ),
+    )
+    parser.add_argument(
+        "--dam-impact-mode",
+        choices=("highlight", "mask"),
+        default="highlight",
+        help=(
+            "Highlight selected-dam downstream paths, or mask results outside their "
+            "buffered corridors (default: highlight)."
+        ),
+    )
+    parser.add_argument(
+        "--dam-buffer-km",
+        type=float,
+        default=50.0,
+        metavar="KM",
+        help="Corridor radius used by --dam-impact-mode mask (default: 50 km).",
+    )
+    parser.add_argument(
         "--color-limit",
         "--kge-limit",
         dest="color_limit",
@@ -1757,9 +2090,20 @@ def parse_args() -> argparse.Namespace:
         help="Parallel rendering processes for batch mode (default: 1).",
     )
     args = parser.parse_args()
+    args.dam_ids = tuple(
+        dict.fromkeys(_normalized_dam_id(value) for value in (args.dam_ids or ()))
+    )
     args.layer_groups = _layer_groups_from_argv(sys.argv[1:])
     if args.workers < 1:
         parser.error("-j/--workers must be at least 1")
+    if "all" in args.dam_ids and args.dam_ids != ("all",):
+        parser.error("--dam-id all cannot be combined with specific dam IDs")
+    if args.dam_ids == ("all",) and not args.show_dams:
+        parser.error("--dam-id all requires -D/--show-dams")
+    if not np.isfinite(args.dam_buffer_km) or args.dam_buffer_km <= 0:
+        parser.error("--dam-buffer-km must be a positive finite number")
+    if args.dam_impact_mode == "mask" and not args.dam_ids:
+        parser.error("--dam-impact-mode mask requires at least one --dam-id")
     output_was_explicit = args.output is not None
     args.output_was_explicit = output_was_explicit
     if output_was_explicit and args.evaluation is not None and len(args.layer_groups) > 1:
@@ -2193,6 +2537,7 @@ def plot_combined_map(
     basin_layer: dict[str, object] | None = None,
     basin_mask: BasinMask | None = None,
     routing_overlays: RoutingOverlayLayers | None = None,
+    dam_influence: DamInfluence | None = None,
     show_dams: bool = False,
 ) -> None:
     option = style.option
@@ -2233,6 +2578,7 @@ def plot_combined_map(
             alpha=0.85,
             zorder=2,
         )
+    _draw_dam_influence(ax, dam_influence, projection)
     levee_lines = _draw_routing_overlays(ax, routing_overlays, projection)
     ax.add_feature(cfeature.BORDERS.with_scale("50m"), edgecolor="0.48", linewidth=0.45, zorder=3)
     ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="0.25", linewidth=0.7, zorder=3)
@@ -2355,6 +2701,7 @@ def plot_combined_map(
             )
         )
     _add_routing_overlay_legend(legend_handles, routing_overlays)
+    _add_dam_influence_legend(legend_handles, dam_influence)
     if basin_layer is not None:
         legend_handles.insert(
             0,
@@ -2420,6 +2767,11 @@ def plot_combined_map(
         summary_parts.append(
             f"dams: {len(dams):,} (triangles, log-scaled total storage)"
         )
+    if dam_influence is not None:
+        summary_parts.append(
+            f"selected-dam downstream path: {len(dam_influence.dam_ids):,} dams, "
+            f"{len(dam_influence.segments):,} segments"
+        )
     overlay_summary = _routing_overlay_summary(routing_overlays).removeprefix("  |  ")
     if overlay_summary:
         summary_parts.append(overlay_summary)
@@ -2447,6 +2799,7 @@ def render_one(
     basin_layer: dict[str, object] | None = None,
     basin_mask: BasinMask | None = None,
     routing_overlays: RoutingOverlayLayers | None = None,
+    dam_influence: DamInfluence | None = None,
 ) -> None:
     evaluation, dams, value_column = read_inputs(
         evaluation_path, args.dams if args.show_dams else None, value_column
@@ -2457,9 +2810,22 @@ def render_one(
             raise ValueError(
                 f"No evaluation stations remain inside basin mask {basin_mask.path}."
             )
+    if dam_influence is not None and dam_influence.mask_results:
+        inside = points_inside_dam_corridor(
+            evaluation["lon"].to_numpy(float),
+            evaluation["lat"].to_numpy(float),
+            dam_influence,
+        )
+        evaluation = evaluation.loc[inside].copy()
+        if evaluation.empty:
+            raise ValueError(
+                f"No evaluation stations remain within {dam_influence.buffer_km:g} km "
+                "of the selected-dam downstream path."
+            )
     extent = shared_extent or automatic_extent(evaluation["lon"], evaluation["lat"])
     dam_year_filter_label = None
     if args.show_dams:
+        dams = filter_dams_by_ids(dams, args.dam_ids)
         dams, dam_year_filter_label = filter_dams_by_year(
             dams,
             args.dam_built_before,
@@ -2490,6 +2856,7 @@ def render_one(
         basin_layer,
         basin_mask,
         routing_overlays,
+        dam_influence,
         args.show_dams,
     )
     print(
@@ -2505,7 +2872,7 @@ def render_one(
 def _render_station_worker(task: tuple[Path, Path, str]) -> str | None:
     if _STATION_WORKER_CONTEXT is None:
         raise RuntimeError("Station worker context was not initialized.")
-    args, shared_extent, basin_layer, basin_mask, routing_overlays = (
+    args, shared_extent, basin_layer, basin_mask, routing_overlays, dam_influence = (
         _STATION_WORKER_CONTEXT
     )
     path, output_path, metric = task
@@ -2519,6 +2886,7 @@ def _render_station_worker(task: tuple[Path, Path, str]) -> str | None:
             basin_layer,
             basin_mask,
             routing_overlays,
+            dam_influence,
         )
     except (OSError, ValueError, KeyError) as exc:
         return str(exc)
@@ -2528,7 +2896,7 @@ def _render_station_worker(task: tuple[Path, Path, str]) -> str | None:
 def _render_grid_worker(task: tuple[Path, Path]) -> str | None:
     if _GRID_WORKER_CONTEXT is None:
         raise RuntimeError("Grid worker context was not initialized.")
-    args, dams, extent, basin_mask, river_network, routing_overlays = (
+    args, dams, extent, basin_mask, river_network, routing_overlays, dam_influence = (
         _GRID_WORKER_CONTEXT
     )
     path, output_path = task
@@ -2542,6 +2910,7 @@ def _render_grid_worker(task: tuple[Path, Path]) -> str | None:
             basin_mask,
             river_network,
             routing_overlays,
+            dam_influence,
         )
     except (OSError, ValueError, KeyError) as exc:
         return str(exc)
@@ -2620,6 +2989,7 @@ def process_station_files(
     manual_extent: tuple[float, float, float, float] | None,
     skip_errors: bool,
     routing_overlay_source: RoutingOverlaySource | None = None,
+    dam_influence: DamInfluence | None = None,
 ) -> tuple[int, int]:
     tasks: list[tuple[Path, Path, str]] = []
     skipped = 0
@@ -2682,6 +3052,10 @@ def process_station_files(
             list(dict.fromkeys((path, metric) for path, _, metric in tasks))
         )
     )
+    if args.dam_ids == ("all",):
+        dam_influence = build_all_visible_dam_influence(
+            args, shared_extent, basin_mask
+        )
     routing_overlays = select_openbench_routing_overlays(
         routing_overlay_source, shared_extent, basin_mask, args
     )
@@ -2695,6 +3069,7 @@ def process_station_files(
             basin_layer,
             basin_mask,
             routing_overlays,
+            dam_influence,
         )
         worker_count = min(args.workers, len(tasks))
         print(f"Rendering {len(tasks)} station maps with {worker_count} processes.")
@@ -2724,6 +3099,7 @@ def process_station_files(
                     basin_layer,
                     basin_mask,
                     routing_overlays,
+                    dam_influence,
                 )
                 completed += 1
             except (OSError, ValueError, KeyError) as exc:
@@ -2741,6 +3117,7 @@ def process_grid_files(
     manual_extent: tuple[float, float, float, float] | None,
     skip_errors: bool,
     routing_overlay_source: RoutingOverlaySource | None = None,
+    dam_influence: DamInfluence | None = None,
 ) -> tuple[int, int]:
     valid_pairs: list[tuple[Path, Path]] = []
     skipped = 0
@@ -2791,6 +3168,8 @@ def process_grid_files(
         if basin_mask is not None
         else manual_extent or automatic_extent_from_grids(grid_paths, args.value_variable)
     )
+    if args.dam_ids == ("all",):
+        dam_influence = build_all_visible_dam_influence(args, extent, basin_mask)
     river_network = load_river_network(
         args.routing_file, args.river_detail, extent, basin_mask
     )
@@ -2808,6 +3187,7 @@ def process_grid_files(
             basin_mask,
             river_network,
             routing_overlays,
+            dam_influence,
         )
         worker_count = min(args.workers, len(valid_pairs))
         print(f"Rendering {len(valid_pairs)} grid maps with {worker_count} processes.")
@@ -2830,7 +3210,7 @@ def process_grid_files(
             try:
                 render_grid_file(
                     path, output_path, args, dams, extent, basin_mask, river_network,
-                    routing_overlays,
+                    routing_overlays, dam_influence,
                 )
                 completed += 1
             except (OSError, ValueError, KeyError) as exc:
@@ -2859,6 +3239,15 @@ def main() -> None:
             f"Loaded requested routing overlays once from {args.routing_file} "
             f"(routing_units={len(routing_overlay_source.longitude):,})."
         )
+    dam_influence = None
+    if args.dam_ids and args.dam_ids != ("all",):
+        dam_influence = build_dam_influence(
+            args.routing_file,
+            args.dams,
+            args.dam_ids,
+            args.dam_buffer_km,
+            args.dam_impact_mode == "mask",
+        )
 
     if args.evaluation_dir is None:
         path = args.evaluation
@@ -2874,12 +3263,12 @@ def main() -> None:
             if suffix == ".csv":
                 process_station_files(
                     [path], [output_path], group_args, manual_extent, False,
-                    routing_overlay_source,
+                    routing_overlay_source, dam_influence,
                 )
             elif suffix in {".nc", ".nc4", ".netcdf"}:
                 process_grid_files(
                     [path], [output_path], group_args, manual_extent, False,
-                    routing_overlay_source,
+                    routing_overlay_source, dam_influence,
                 )
             else:
                 raise ValueError(
@@ -2917,13 +3306,13 @@ def main() -> None:
         ]
         completed, skipped = process_station_files(
             station_paths, station_outputs, group_args, manual_extent, True,
-            routing_overlay_source,
+            routing_overlay_source, dam_influence,
         )
         station_completed += completed
         station_skipped += skipped
         completed, skipped = process_grid_files(
             grid_paths, grid_outputs, group_args, manual_extent, True,
-            routing_overlay_source,
+            routing_overlay_source, dam_influence,
         )
         grid_completed += completed
         grid_skipped += skipped
