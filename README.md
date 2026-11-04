@@ -4,6 +4,85 @@
 
 所有工具都不会隐式提交作业。restart 工具默认 dry-run，只有显式使用 `--apply` 才会写入 case；提交助手只有显式使用 `--submit` 才会调用调度器。
 
+## 本机服务器配置（weizx24）
+
+本机使用独立配置 `configs/servers/weizx24.json`，无需修改旧服务器默认值。
+优先级为 **显式命令行参数 > 服务器配置 > 原有默认值**；省略 `--site-config` 时沿用原入口。
+需要 Python 3.10 或更新版本。配置文件中的相对路径以该 JSON 所在目录为基准，命令行相对路径以当前目录为基准。
+
+```bash
+export DLB_ROOT=/home/weizx24/weizx24/DLB_experiments_new
+export DLB_SITE="$DLB_ROOT/configs/servers/weizx24.json"
+
+# 只读检查全部区域：目录、掩膜、源码字段、可执行权限、NetCDF 变量及逐月 forcing 文件名。
+python3 "$DLB_ROOT/dlb_04_preflight.py" --site-config "$DLB_SITE" \
+  --check-netcdf --check-forcing-files
+
+# 草稿预览：仍缺少模型能力时也能查看完整配置；此目录不能用于正式提交。
+python3 "$DLB_ROOT/dlb_01_create_experiment.py" EXP101 local Mekong \
+  --site-config "$DLB_SITE" --output-dir "$DLB_ROOT/EXP101_local_Mekong_draft" --draft
+
+# 问题解决后，在新目录中正式生成；不会运行模型或提交作业。
+python3 "$DLB_ROOT/dlb_01_create_experiment.py" EXP102 local Mekong \
+  --site-config "$DLB_SITE"
+```
+
+本机默认使用 Slurm `second`、1 节点、144 MPI 进程、100G、48 小时、exclusive，
+从作业环境的 PATH 查找 `mpirun`，不固定节点、不加载旧 MPI/Intel 脚本。
+例如，使用 `--cores 72 --tasks-per-node 72 --no-exclusive` 可覆盖资源；
+需要固定节点时指定 `--node tms13`。节点数由进程数和每节点任务数向上取整。
+资源设置来自参考脚本，尚未通过真实调度器提交验证。
+
+三个生成入口均支持 `--site-config`。单独生成 namelist 和 Slurm 的示例：
+
+```bash
+python3 "$DLB_ROOT/dlb_02_generate_namelists.py" --site-config "$DLB_SITE" \
+  --out-dir /tmp/dlb_mekong_colm --region Mekong --include-dam-init --draft
+
+python3 "$DLB_ROOT/dlb_03_generate_jobs.py" --site-config "$DLB_SITE" \
+  --nml-dir /tmp/dlb_mekong_colm --out-dir /tmp/dlb_mekong_jobs --allow-draft
+
+# 正式生成后检查具体实验；草稿会明确拒绝。
+python3 "$DLB_ROOT/dlb_04_preflight.py" \
+  --nml-dir "$DLB_ROOT/EXP102_local_Mekong/config/colm" --phase spinup \
+  --exe /home/weizx24/weizx24/colm/CoLM_0914/run/colm.x \
+  --check-netcdf --check-forcing-files
+```
+
+本机配置关闭 namelist 生成器附带的旧式 LSF 输出，由作业生成器统一生成 Slurm。
+`--lsf` 可显式开启旧式 LSF 输出；它仍保留旧服务器的脚本实现，本机请使用上面的 Slurm 入口。
+
+DLB 基础模板位于 `templates/dlb_base.nml`，参考 Amazon 文件的陆面设置，明确设置
+`DEF_TRACER_NUM = 0`。原有区域边界、网格、1996–1999 spinup、2000–2005 模拟及评估规则继续由生成器控制。
+USA/SA/Mekong 使用 06min routing，Global 使用 15min；Amazon 0.25° 泥沙实验不会替换现有区域设计。
+
+实验的 `run_manifest.json`、`manifest.yaml` 和 `provenance/site_config.json` 记录配置来源、SHA256 和生效值。
+`provenance/input_validation.txt` 记录未解决的问题。预检使用实验记录中的配置值，避免服务器 JSON 后续修改影响已有实验。
+源码检查核对 `NAMELIST /nl_colm/` 及其派生类型字段；不预处理所有编译分支，也不能证明已有二进制的编译配置。
+
+本机只读检查结果见 `reports/weizx24_preflight.txt`。当前 CoLM 源码缺少
+`DEF_UnitCatchment_regional` 和 `DEF_GridRiverLake_FloodFeedback`，正式生成会失败。
+草稿会保留这两个字段并记录问题；不会自动删除字段或改动 CoLM 源码。
+`--strict-macros` 可将源码宏不一致提升为失败。
+
+新版继续由 `dlb_08_generate_openbench.py` 独立生成 OpenBench 配置：USA 生成 36 份，其他区域 18 份，
+包含成对比较及 spinup、CTL 单独评估。新版的径流参考源 `OpenBench_Streamflow_Daily` 保持不变。
+
+已有实验可分别再生成，原配置会备份，CoLM 再生成继续拒绝已有运行产物的实验：
+
+```bash
+python3 "$DLB_ROOT/dlb_02_generate_namelists.py" \
+  --experiment-dir /path/to/experiment --overwrite
+python3 "$DLB_ROOT/dlb_08_generate_openbench.py" /path/to/experiment --overwrite
+```
+
+CoLM 再生成使用实验记录中的模板、本机配置和 MPI/Slurm 资源，无需追加 `--site-config`；
+OpenBench 再生成默认读取已记录的掩膜根目录，也可用 `--mask-root` 或 `--site-config` 覆盖。
+作业脚本继续使用新版相对路径规则，移动实验目录后可继续预览提交。
+
+本机配置的实验父目录已经指向新仓库；`mask_root` 仍引用旧仓库的
+`/home/weizx24/weizx24/DLB_experiments/basin_mask/outputs`，请保留该数据目录。
+
 ## 1. 路径和默认值
 
 建议先设置工具目录，后续命令可以直接复制：

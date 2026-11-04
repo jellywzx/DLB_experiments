@@ -10,6 +10,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from dlb_site_config import parse_site_args,audit_site,unsupported_fields,PATH_KEYS,forcing_month_issues
 from dlb_00_workflow_common import (WorkflowError,load_study,select,assignments,string,number,
  path_value,stamp,timefiles,constfiles,validate_restart_filenames,gridriver_file,
  gridriver_integrity,probe_netcdf,ROUTING_FIELDS,LEVEE_FIELDS,BIF_FIELDS,DAM_FIELDS,error_exit)
@@ -17,7 +18,7 @@ from dlb_00_workflow_common import (WorkflowError,load_study,select,assignments,
 
 def main()->int:
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--nml-dir',required=True,type=Path)
+    p.add_argument('--nml-dir',type=Path,help='Generated experiment; omit for a read-only --site-config audit')
     p.add_argument('--phase',choices=['inputs','spinup','dam-init','handoff','experiments','all'],default='all')
     p.add_argument('--only',default='all',help='experiments subset')
     p.add_argument('--exe',type=Path,help='Absolute or relative compiled colm.x path (required for run phases)')
@@ -25,7 +26,22 @@ def main()->int:
     p.add_argument('--strict-macros',action='store_true',help='Fail on mismatched key source macros')
     p.add_argument('--check-netcdf',action='store_true',help='Open routing/reservoir NetCDF and check names')
     p.add_argument('--check-forcing-files',action='store_true',help='Check each JRA3Q monthly file by name (1996-2005)')
-    args=p.parse_args()
+    p.add_argument('--region',choices=['USA','SA','Mekong','Global'],help='Profile audit region; default all')
+    for key in ('case-root','rawdata','runtime','soil-init','template','mask-root','forcing-root'):
+        p.add_argument('--'+key,type=Path)
+    p.add_argument('--forcing-nml',default='JRA3Q')
+    args=parse_site_args(p)
+    if not args.nml_dir:
+        if not args.site_config:p.error('--nml-dir or --site-config is required')
+        required=('repo_root','case_root','rawdata','runtime','soil_init','mask_root')
+        if any(getattr(args,k) is None for k in required):p.error('Profile audit requires '+', '.join(required))
+        errors,notes=audit_site(args)
+        print('PROFILE',args.site_metadata['path'])
+        print('REGIONS',args.region or 'USA SA Mekong Global')
+        for note in notes:print('WARN ',note)
+        for error in errors:print('FAIL ',error)
+        print(f'SUMMARY: {len(errors)} FAIL, {len(notes)} WARN')
+        return 1 if errors else 0
     study=load_study(args.nml_dir)
     selected=select(study,args.only)
     errors=[];warnings=[];ok=[]
@@ -33,6 +49,23 @@ def main()->int:
     def add(condition:bool,message:str,kind:str='error')->None:
         (ok if condition else (warnings if kind=='warn' else errors)).append(message)
 
+    metadata=study.manifest.get('site_config',{})
+    if metadata.get('path'):
+        # Use the recorded effective values, independent of later profile edits.
+        from argparse import Namespace
+        saved=metadata['effective']
+        audit_args=Namespace(**{k:Path(v) if k in PATH_KEYS and v is not None else v for k,v in saved.items()})
+        audit_args.region=next(iter(study.manifest['runs']['spinup']))
+        audit_args.strict_macros=args.strict_macros
+        audit_args.check_netcdf=args.check_netcdf
+        audit_args.check_forcing_files=args.check_forcing_files
+        for key in ('template','forcing_root'):
+            if not hasattr(audit_args,key):setattr(audit_args,key,None)
+        problems,notes=audit_site(audit_args)
+        errors.extend(problems);warnings.extend(notes)
+    source_repo=args.repo_root or Path(study.manifest['paths']['repo_root'])
+    errors.extend(unsupported_fields(source_repo,[r.nml.read_text() for r in
+        (study.spinup,*([study.dam_init] if study.dam_init else []),*study.experiments)]))
     ref=study.spinup.conf
     add(study.case_root.is_dir(),f'case-root 存在: {study.case_root}')
     for key in ('DEF_dir_rawdata','DEF_dir_runtime','DEF_file_SoilInit','DEF_UnitCatchment_file','DEF_ReservoirPara_file'):
@@ -51,27 +84,9 @@ def main()->int:
         force_root=path_value(f,'DEF_dir_forcing')
         add(force_root.is_dir(),f'强迫数据根目录: {force_root}')
         if args.check_forcing_files and force_root.is_dir():
-            add(string(f,'DEF_forcing%groupby').lower()=='month',
-                '此逐月文件名检查只支持 DEF_forcing%groupby = month')
-            for i in range(1,9):
-                key=f'DEF_forcing%fprefix({i})'
-                prefix=string(f,key)
-                pp=force_root/prefix
-                parent=pp.parent
-                if not parent.is_dir():
-                    errors.append(f'{key} 文件夹缺失: {parent}');continue
-                # Filename-based check; does not prove NetCDF data values or time axis.
-                candidates=[x.name for x in parent.iterdir() if x.is_file() and x.name.startswith(pp.name)]
-                missing=[]
-                for year in range(1996,2006):
-                    for month in range(1,13):
-                        yyyymm=f'{year:04d}{month:02d}'
-                        yyyym=f'{year:04d}-{month:02d}'
-                        yyyy_m=f'{year:04d}_{month:02d}'
-                        if not any(yyyymm in name or yyyym in name or yyyy_m in name
-                                   for name in candidates):
-                            missing.append(yyyymm)
-                add(not missing, f'{key} 逐月文件名 {120-len(missing)}/120；缺失示例: {missing[:4]}')
+            monthly_errors=forcing_month_issues(forcing_nml)
+            errors.extend(monthly_errors)
+            add(not monthly_errors,'JRA3Q 8 variables × 120 monthly files, 1996–2005')
         elif force_root.is_dir():
             warnings.append('forcing 仅验证了配置/目录，未逐月验证实际文件；可使用 --check-forcing-files')
 
@@ -84,25 +99,12 @@ def main()->int:
         add(number(run.conf,'DEF_Runoff_SCHEME')==3,f'{run.label} Simple VIC runoff=3')
         add(not (run.conf.get('def_gridriverlake_floodfeedback','').lower()!='.false.'),
             f'{run.label} 洪泛→陆面反馈关闭')
-    if args.repo_root:
-        macros=args.repo_root.resolve()/'include/define.h'
-        if not macros.is_file():
-            errors.append(f'源码宏文件不存在: {macros}')
-        else:
-            state={}
-            for l in macros.read_text(encoding='utf-8').splitlines():
-                m=re.match(r'^\s*#(define|undef)\s+(\w+)',l)
-                if m:state[m[2]]=m[1]=='define'
-            for key,expect in {'GRIDBASED':True,'GridRiverLakeFlow':True,'USEMPI':True,
-                               'CaMa_Flood':False,'BGC':False,'CROP':False,
-                               'MaterialTransport':False}.items():
-                add(state.get(key)==expect,f'include/define.h {key} = {expect}',
-                    'error' if args.strict_macros else 'warn')
-            if not (state.get('LULC_IGBP_PFT') or state.get('LULC_IGBP_PC')):
-                errors.append('既未定义 LULC_IGBP_PFT，也未定义 LULC_IGBP_PC')
-            if not state.get('LULC_IGBP_PFT'):
-                warnings.append('项目提纲计划使用 LULC_IGBP_PFT，当前源码可能是 LULC_IGBP_PC；需与初始场一致并完整重编')
-            warnings.append('define.h 检查只能验证源码宏，不能证明现有 colm.x 的编译配置')
+    if args.repo_root and not metadata.get('path'):
+        from dlb_02_generate_namelists import check_macros
+        for note in check_macros(args.repo_root.resolve()):
+            if args.strict_macros and (': define.h=' in note or note.startswith('Cannot inspect')):
+                errors.append(note)
+            else:warnings.append(note)
 
     if args.check_netcdf:
         route=path_value(ref,'DEF_UnitCatchment_file')
@@ -167,6 +169,7 @@ def main()->int:
             if not (run.case_dir/'.aas_restart_handoff.json').is_file():
                 warnings.append(f'{run.label}: 未找到 .aas_restart_handoff.json，可能是人工分发；请核对来源')
     for text in ok: print('PASS ',text)
+    warnings=list(dict.fromkeys(warnings));errors=list(dict.fromkeys(errors))
     for text in warnings:print('WARN ',text)
     for text in errors:print('FAIL ',text)
     print(f'\nSUMMARY: {len(ok)} PASS, {len(warnings)} WARN, {len(errors)} FAIL')
