@@ -84,6 +84,16 @@ class ExperimentTemplateTests(unittest.TestCase):
                 '--output-dir',str(target),'--draft',ok=False)
             self.assertNotEqual(conflict.returncode,0)
 
+    def test_default_repo_and_case_roots(self):
+        with tempfile.TemporaryDirectory() as td:
+            target=Path(td)/'minimal_command'
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP962','defaults','Mekong',
+                '--output-dir',str(target),'--draft')
+            manifest=json.loads((target/'config/colm/run_manifest.json').read_text())
+            self.assertEqual(manifest['paths']['repo_root'],str(REPO.resolve()))
+            self.assertEqual(manifest['paths']['case_root'],
+                '/share/home/dq134/wzx/CoLM/cases')
+
     def test_transactional_restart_donor_selection(self):
         try:
             from scipy.io import netcdf_file

@@ -13,7 +13,9 @@ import tempfile
 from datetime import datetime,timezone
 from pathlib import Path
 
-DEFAULT_ROOT=Path('/share/home/dq134/wzx/CoLM/DLB_experiments')
+DEFAULT_ROOT=Path('/share/home/dq134/wzx/DLB_experiments')
+DEFAULT_REPO_ROOT=Path('/share/home/dq134/wzx/CoLM/CoLM202X_1030')
+DEFAULT_CASE_ROOT=Path('/share/home/dq134/wzx/CoLM/cases')
 DEFAULT_RAW=Path('/share/home/dq013/zhwei/colm/data/CoLMrawdata')
 DEFAULT_RUNTIME=Path('/share/home/dq013/zhwei/colm/data/CoLMruntime')
 DEFAULT_SOIL=Path('/share/home/dq013/zhwei/colm/data/soilstate/soilstate.nc')
@@ -100,7 +102,10 @@ def render_static_templates(template_root:Path,target_root:Path,values:dict[str,
 def main()->int:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('experiment_id');p.add_argument('slug');p.add_argument('region',choices=BASINS)
-    p.add_argument('--repo-root',required=True,type=Path);p.add_argument('--case-root',required=True,type=Path)
+    p.add_argument('--repo-root',type=Path,default=DEFAULT_REPO_ROOT,
+        help=f'CoLM checkout (default: {DEFAULT_REPO_ROOT})')
+    p.add_argument('--case-root',type=Path,default=DEFAULT_CASE_ROOT,
+        help=f'CoLM case root (default: {DEFAULT_CASE_ROOT})')
     p.add_argument('--forcing-nml',default='JRA3Q')
     p.add_argument('--eval-start-year',type=int,default=2001);p.add_argument('--eval-end-year',type=int,default=2005)
     p.add_argument('--rawdata',type=Path,default=DEFAULT_RAW);p.add_argument('--runtime',type=Path,default=DEFAULT_RUNTIME)
