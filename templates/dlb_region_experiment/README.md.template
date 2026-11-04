@@ -1,0 +1,14 @@
+# __EXP_NAME__
+
+Regional CoLM DLB factorial suite. Creation only rendered configuration; it did not create cases, run CoLM/OpenBench, or submit jobs.
+
+## Manual gates
+
+1. `bash config/jobs/submit_batch.sh --dry-run --stage spinup` then explicitly use `--submit`.
+2. After spinup validation: `python __TOOLS_DIR__/dlb_05_restart_handoff.py prepare-dam-init --nml-dir config/colm --apply`.
+3. Submit `dam-init`, validate it, then run the handoff dry-run and explicit `--apply`.
+4. Submit `experiments`.
+5. For each OpenBench YAML: `openbench check CONFIG.yaml` then `openbench run CONFIG.yaml`.
+6. Record OpenBench results and refresh metadata with `python __TOOLS_DIR__/dlb_07_refresh_experiment.py __EXP_DIR__`.
+
+No scheduler dependency is created automatically.

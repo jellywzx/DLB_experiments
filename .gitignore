@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Analysis-generated files
+dam_analysis/dam_data/
+dam_analysis/basin_cache/
+
+# Model and evaluation outputs
+**/openbench_output/
+**/markers/
+**/*.out
+**/*.err
+**/*.log
+
+# Temporary experiment creation directories
+.EXP*.*/
