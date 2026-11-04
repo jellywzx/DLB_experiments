@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import re
 import shlex
 import sys
@@ -33,25 +34,29 @@ def script_body(label:str,case:str,nml:Path,run_dir:Path,steps:list[str],job_dir
                 log_dir:Path,scheduler:str,queue:str,cores:int,tpn:int,mem:str,walltime:str,
                 launcher:str,workdir:Path,mpi_root:Path|None,intel_env:Path|None)->str:
     name=case[:100]
+    log_rel=Path(os.path.relpath(log_dir,job_dir))
+    nml_rel=os.path.relpath(nml,job_dir)
     lines=['#!/usr/bin/env bash']
     if scheduler=='lsf':
         lines.extend([f'#BSUB -J {name}',f'#BSUB -q {queue}',f'#BSUB -n {cores}',
                       f'#BSUB -W {walltime}',f'#BSUB -R "span[ptile={tpn}]"',
                       f'#BSUB -R "rusage[mem={mem}]"',
-                      f'#BSUB -o {log_dir}/{label}.%J.out',
-                      f'#BSUB -e {log_dir}/{label}.%J.err'])
+                      f'#BSUB -o {log_rel}/{label}.%J.out',
+                      f'#BSUB -e {log_rel}/{label}.%J.err'])
     else:
         nodes=math.ceil(cores/tpn)
         lines.extend([f'#SBATCH --job-name={name}',f'#SBATCH --partition={queue}',
                       f'#SBATCH --nodes={nodes}',f'#SBATCH --ntasks={cores}',
                       f'#SBATCH --ntasks-per-node={tpn}',f'#SBATCH --time={walltime}',
-                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_dir}/{label}.%j.out',
-                      f'#SBATCH --error={log_dir}/{label}.%j.err'])
-    lines.extend(['','set -euo pipefail'])
+                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_rel}/{label}.%j.out',
+                      f'#SBATCH --error={log_rel}/{label}.%j.err'])
+    lines.extend(['','set -euo pipefail',
+                  'SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"'])
     if intel_env:
         lines.append(f'source {sq(intel_env)}')
     lines.extend(['export OMP_NUM_THREADS=1','export HDF5_USE_FILE_LOCKING=FALSE','ulimit -s unlimited',
-        f'cd {sq(workdir)}',f'RUN_DIR={sq(run_dir)}',f'NML={sq(nml)}',f'MARKER={sq(job_dir/"markers"/(label+".success"))}',
+        f'cd {sq(workdir)}',f'RUN_DIR={sq(run_dir)}',f'NML="$SCRIPT_DIR"/{sq(nml_rel)}',
+        f'MARKER="$SCRIPT_DIR/markers/{label}.success"',
         'test -f "$NML" || { echo "Missing NML: $NML" >&2; exit 1; }',
         'mkdir -p "$(dirname "$MARKER")"',
         'rm -f "$MARKER"  # delete only this script-owned success marker',
@@ -77,6 +82,7 @@ def submit_helper(scheduler:str,job_dir:Path,nml_dir:Path,exe:Path,script_dir:Pa
     ext='lsf' if scheduler=='lsf' else 'slurm'
     submit='bsub' if scheduler=='lsf' else 'sbatch'
     preflight=script_dir/'dlb_04_preflight.py'
+    nml_rel=os.path.relpath(nml_dir,job_dir)
     # Restrict --only to known literal labels; use a gate on every submitted case.
     return f'''#!/usr/bin/env bash
 # Safe submission helper. Only --submit can call {submit}.
@@ -95,8 +101,9 @@ while (($#)); do
   shift
 done
 case "$STAGE" in spinup|dam-init|experiments) ;; *) echo "stage must be spinup/dam-init/experiments" >&2; exit 2;; esac
-JOB_DIR={sq(job_dir)}
-NML_DIR={sq(nml_dir)}
+SCRIPT_DIR="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")" && pwd)"
+JOB_DIR="$SCRIPT_DIR"
+NML_DIR="$(cd -- "$SCRIPT_DIR"/{sq(nml_rel)} && pwd)"
 EXE={sq(exe)}
 PREFLIGHT={sq(preflight)}
 if [[ "$STAGE" == spinup ]]; then
@@ -130,7 +137,7 @@ for j in "${{JOBS[@]}}"; do
   [[ -f "$JOB" ]] || {{ echo "Missing job: $JOB" >&2; exit 2; }}
   if [[ "$MODE" == submit ]]; then
     echo "SUBMIT: $JOB"
-    {'bsub < "$JOB"' if scheduler=='lsf' else 'sbatch "$JOB"'}
+    {'(cd "$JOB_DIR" && bsub < "$JOB")' if scheduler=='lsf' else '(cd "$JOB_DIR" && sbatch "$JOB")'}
   else
     echo "DRY-RUN: {'bsub <' if scheduler=='lsf' else 'sbatch'} $JOB"
   fi

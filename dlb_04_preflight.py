@@ -67,7 +67,9 @@ def main()->int:
                     for month in range(1,13):
                         yyyymm=f'{year:04d}{month:02d}'
                         yyyym=f'{year:04d}-{month:02d}'
-                        if not any(yyyymm in name or yyyym in name for name in candidates):
+                        yyyy_m=f'{year:04d}_{month:02d}'
+                        if not any(yyyymm in name or yyyym in name or yyyy_m in name
+                                   for name in candidates):
                             missing.append(yyyymm)
                 add(not missing, f'{key} 逐月文件名 {120-len(missing)}/120；缺失示例: {missing[:4]}')
         elif force_root.is_dir():

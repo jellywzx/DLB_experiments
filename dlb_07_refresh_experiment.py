@@ -54,7 +54,7 @@ def main()->int:
     if result.returncode:raise ValueError(f'stage status failed: {result.stderr or result.stdout}')
     stages=json.loads(result.stdout)
     configs=sorted((root/'config/openbench').rglob('*.yaml'))
-    expected=28 if manifest['region']=='USA' else 14
+    expected=len(manifest['evaluation']['projects'])
     config_errors=[]
     if len(configs)!=expected:config_errors.append(f'OpenBench YAML count {len(configs)} != {expected}')
     for path in configs:

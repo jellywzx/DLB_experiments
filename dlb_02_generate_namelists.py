@@ -30,10 +30,14 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
+from datetime import datetime,timezone
 from pathlib import Path
 
 BASE_TEMPLATE = Path('run/examples/Amazon_Grid_25km_IGBP_VG_RiverLake.nml')
@@ -405,14 +409,116 @@ def file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def run_command(command:list[str])->None:
+    result=subprocess.run(command,text=True,capture_output=True,check=False)
+    if result.returncode:
+        raise ValueError(result.stderr or result.stdout or 'command failed')
+
+
+def regenerate_experiment(root:Path,overwrite:bool)->int:
+    root=root.resolve();manifest_path=root/'manifest.yaml'
+    colm_dir=root/'config/colm';jobs_dir=root/'config/jobs'
+    if not overwrite:
+        die('--experiment-dir requires --overwrite; only config/colm and config/jobs are replaced')
+    if not manifest_path.is_file() or not (colm_dir/'run_manifest.json').is_file():
+        die(f'Not a generated experiment directory: {root}')
+    manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
+    old=json.loads((colm_dir/'run_manifest.json').read_text(encoding='utf-8'))
+    markers=list((jobs_dir/'markers').glob('*')) if (jobs_dir/'markers').is_dir() else []
+    case_root=Path(old['paths']['case_root'])
+    runs=[*old['runs']['spinup'].values(),*old['runs']['dam_init'].values()]
+    for values in old['runs']['experiments'].values():runs.extend(values)
+    products=[]
+    for run in runs:
+        case=case_root/run['case']
+        for dirname in ('history','restart','restarts'):
+            path=case/dirname
+            if path.is_dir():products.extend(x for x in path.iterdir() if x.is_file())
+    if markers or products:
+        sample=[*(str(x) for x in markers[:3]),*(str(x) for x in products[:3])]
+        die('Refusing to overwrite CoLM configuration after run products exist: '+', '.join(sample))
+    region=manifest['region'];resources=old.get('resources',{})
+    repo=Path(old['paths']['repo_root']);forcing=old['forcing']['dataset']
+    staging=Path(tempfile.mkdtemp(prefix='.colm-regenerate.',dir=str(root)))
+    staged_colm=staging/'colm';staged_jobs=staging/'jobs'
+    final_log=root/'logs'
+    command=[sys.executable,str(Path(__file__).resolve()),
+        '--repo-root',str(repo),'--out-dir',str(staged_colm),'--case-root',str(case_root),
+        '--forcing-nml',forcing,'--region',region,'--study-id',manifest['experiment_id'],
+        '--study-slug',manifest['slug'],'--rawdata',old['paths']['rawdata'],
+        '--runtime',old['paths']['runtime'],'--soil-init',old['paths']['soil_init'],
+        '--log-dir',str(final_log),'--no-lsf','--include-dam-init',
+        '--eval-start-year',str(old['evaluation']['start_year']),
+        '--eval-end-year',str(old['evaluation']['end_year'])]
+    if old.get('draft'):command.append('--draft')
+    try:
+        run_command(command)
+        scheduler=resources.get('scheduler','lsf')
+        jobs=[sys.executable,str(Path(__file__).resolve().parent/'dlb_03_generate_jobs.py'),
+            '--nml-dir',str(staged_colm),'--scheduler',scheduler,
+            '--exe',str(repo/'run/colm.x'),'--out-dir',str(staged_jobs),
+            '--log-dir',str(final_log),'--queue',resources.get('queue','normal'),
+            '--cores',str(resources.get('cores',240)),
+            '--tasks-per-node',str(resources.get('tasks_per_node',48)),
+            '--memory',resources.get('memory','150G'),
+            '--walltime',resources.get('walltime','24:00:00')]
+        if resources.get('mpi_root'):jobs.extend(['--mpi-root',resources['mpi_root']])
+        if resources.get('intel_env'):jobs.extend(['--intel-env',resources['intel_env']])
+        if old.get('draft'):jobs.append('--allow-draft')
+        run_command(jobs)
+        new_manifest=json.loads((staged_colm/'run_manifest.json').read_text(encoding='utf-8'))
+        new_manifest['resources']=resources
+        (staged_colm/'run_manifest.json').write_text(
+            json.dumps(new_manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+        replacements=((str(staged_colm),str(colm_dir)),(str(staged_jobs),str(jobs_dir)),
+                      (str(staging),str(root)))
+        for path in staging.rglob('*'):
+            if path.is_file():
+                text=path.read_text(encoding='utf-8')
+                for source,target in replacements:text=text.replace(source,target)
+                path.write_text(text,encoding='utf-8')
+        stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        backup=root/'provenance/backups'/stamp;backup.mkdir(parents=True)
+        shutil.copytree(colm_dir,backup/'colm')
+        shutil.copytree(jobs_dir,backup/'jobs')
+        shutil.copy2(manifest_path,backup/'manifest.yaml')
+        old_colm=colm_dir.with_name(f'.colm.old.{os.getpid()}')
+        old_jobs=jobs_dir.with_name(f'.jobs.old.{os.getpid()}')
+        moved_colm=False;moved_jobs=False
+        try:
+            os.rename(colm_dir,old_colm);moved_colm=True
+            os.rename(jobs_dir,old_jobs);moved_jobs=True
+            os.rename(staged_colm,colm_dir);os.rename(staged_jobs,jobs_dir)
+            manifest['colm_regenerated_at']=datetime.now(timezone.utc).isoformat()
+            temporary=manifest_path.with_name(f'.manifest.tmp.{os.getpid()}')
+            temporary.write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+            os.replace(temporary,manifest_path)
+        except Exception:
+            if old_colm.exists() and colm_dir.exists():shutil.rmtree(colm_dir)
+            if old_jobs.exists() and jobs_dir.exists():shutil.rmtree(jobs_dir)
+            if moved_colm and old_colm.exists():os.rename(old_colm,colm_dir)
+            if moved_jobs and old_jobs.exists():os.rename(old_jobs,jobs_dir)
+            raise
+        shutil.rmtree(old_colm);shutil.rmtree(old_jobs)
+        run_command([sys.executable,str(Path(__file__).resolve().parent/'dlb_07_refresh_experiment.py'),
+                     str(root)])
+    finally:
+        shutil.rmtree(staging,ignore_errors=True)
+    print(f'Regenerated CoLM namelists and jobs at {root}')
+    print(f'Previous configuration backed up at {backup}')
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--repo-root', type=Path, required=True,
+    parser.add_argument('--experiment-dir',type=Path,
+                        help='Regenerate config/colm and config/jobs for an existing experiment')
+    parser.add_argument('--repo-root', type=Path,
                         help='Local checkout of zhongwangwei/CoLM202X')
-    parser.add_argument('--out-dir', type=Path, required=True,
+    parser.add_argument('--out-dir', type=Path,
                         help='Only this directory will be written')
-    parser.add_argument('--case-root', type=Path, required=True,
+    parser.add_argument('--case-root', type=Path,
                         help='DEF_dir_output: model will create subdirectories per case')
     parser.add_argument('--study-id',
                         help='Optional EXPnnn identifier used as a case-name prefix')
@@ -429,7 +535,7 @@ def main() -> int:
                         help='Also generate the dedicated 2000 D_INIT namelist')
     parser.add_argument('--eval-start-year', type=int, default=2001)
     parser.add_argument('--eval-end-year', type=int, default=2005)
-    parser.add_argument('--forcing-nml', required=True, metavar='DATASET',
+    parser.add_argument('--forcing-nml', metavar='DATASET',
                         help='Dataset name resolved as REPO_ROOT/run/forcing/DATASET.nml')
     parser.add_argument('--region', choices=REGIONS,
                         help='Generate one domain (default: USA, SA, Mekong, and Global)')
@@ -444,6 +550,16 @@ def main() -> int:
     parser.add_argument('--overwrite', action='store_true',
                         help='Overwrite only generated names, never delete unrelated files')
     args = parser.parse_args()
+
+    if args.experiment_dir:
+        forbidden=(args.repo_root,args.out_dir,args.case_root,args.forcing_nml,args.study_id,args.study_slug)
+        if any(x is not None for x in forbidden):
+            die('--experiment-dir cannot be combined with flat-generation path/study options')
+        return regenerate_experiment(args.experiment_dir,args.overwrite)
+    missing=[name for name,value in (('--repo-root',args.repo_root),('--out-dir',args.out_dir),
+                                      ('--case-root',args.case_root),('--forcing-nml',args.forcing_nml))
+             if value is None]
+    if missing:die('Flat generation requires '+', '.join(missing))
 
     repo = args.repo_root.resolve()
     out = args.out_dir.resolve()

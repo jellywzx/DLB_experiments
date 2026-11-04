@@ -17,7 +17,7 @@ export DLB_ROOT=/share/home/dq134/wzx/DLB_experiments
 ```text
 CoLM 仓库       /share/home/dq134/wzx/CoLM/CoLM202X_1030
 case 根目录     /share/home/dq134/wzx/CoLM/cases
-实验父目录      /share/home/dq134/wzx/DLB_experiments
+实验父目录      /share/home/dq134/wzx/CoLM/DLB_nml
 forcing         JRA3Q
 评估年份        2001–2005
 LSF queue       normal
@@ -37,6 +37,7 @@ python "$DLB_ROOT/dlb_04_preflight.py" --help
 python "$DLB_ROOT/dlb_05_restart_handoff.py" --help
 python "$DLB_ROOT/dlb_06_stage_status.py" --help
 python "$DLB_ROOT/dlb_07_refresh_experiment.py" --help
+python "$DLB_ROOT/dlb_08_generate_openbench.py" --help
 ```
 
 ## 2. 创建完整实验
@@ -67,7 +68,7 @@ resolution_0p1
 默认输出为：
 
 ```text
-/share/home/dq134/wzx/DLB_experiments/EXP002_control_Mekong
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP002_control_Mekong
 ```
 
 ### 2.2 指定完整输出目录
@@ -150,7 +151,7 @@ EXP002_control_Mekong/
 进入实验目录后，后续示例都可直接运行：
 
 ```bash
-export EXP_DIR=/share/home/dq134/wzx/DLB_experiments/EXP002_control_Mekong
+export EXP_DIR=/share/home/dq134/wzx/CoLM/DLB_nml/EXP002_control_Mekong
 cd "$EXP_DIR"
 ```
 
@@ -191,6 +192,20 @@ python "$DLB_ROOT/dlb_02_generate_namelists.py" \
 如需检查 routing/reservoir NetCDF 关键变量，在上面的完整命令末尾追加 `--check-netcdf`。如需把源码宏不一致视为失败，追加 `--strict-build`。两个选项可以同时使用。
 
 `--draft` 只用于输入尚未齐备时预览配置；draft 配置不能进入正式运行流程。`--overwrite` 只覆盖生成器负责的同名文件，使用前应先检查输出目录。
+
+### 4.3 重新生成现有实验的 CoLM 配置
+
+以下命令从现有 manifest 恢复路径和资源参数，只原子替换
+`config/colm/` 和 `config/jobs/`：
+
+```bash
+python "$DLB_ROOT/dlb_02_generate_namelists.py" \
+  --experiment-dir "$EXP_DIR" \
+  --overwrite
+```
+
+原配置会备份到 `provenance/backups/<UTC时间>/`。如果已有 success marker、
+history 或 restart 运行产物，生成器会拒绝覆盖，此时应创建新实验编号。
 
 ## 5. 生成 LSF 或 Slurm 作业
 
@@ -455,7 +470,18 @@ python "$DLB_ROOT/dlb_06_stage_status.py" \
 
 ## 12. OpenBench
 
-每份 YAML 只比较 E0_CTL 与一个处理组。径流使用 `GRDC_Daily`，淹没使用 `GIEMS_v2_LowRes`。
+处理组 YAML 比较 E0_CTL 与一个处理组，其中 DLB 组使用
+`streamflow_DLB.yaml` 和 `inundation_DLB.yaml`。每个流域还生成 spinup
+和 ctl 的单实验评估配置：
+
+```text
+streamflow_spinup.yaml  inundation_spinup.yaml
+streamflow_ctl.yaml     inundation_ctl.yaml
+```
+
+spinup 评估年份为其运行期 1996–1999；ctl 使用创建实验时指定的评估年份。
+径流使用 `OpenBench_Streamflow_Daily`，淹没使用 `GIEMS_v2_LowRes`。USA 共生成 36 份
+YAML，SA、Mekong 和 Global 各生成 18 份。
 
 检查单个配置：
 
@@ -470,6 +496,19 @@ openbench run "$EXP_DIR/config/openbench/mekong/streamflow_D.yaml"
 ```
 
 OpenBench 输出路径已经写入 YAML，统一位于实验目录的 `openbench_output/`。
+
+修改 OpenBench 生成代码或评估年份后，可以单独覆盖 YAML，不会改动
+CoLM namelist、jobs、case 或已有 OpenBench 输出：
+
+```bash
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
+  --eval-start-year 2001 \
+  --eval-end-year 2005 \
+  --overwrite
+```
+
+旧 YAML 和覆盖前的 manifest 会备份到 `provenance/backups/<UTC时间>/`。
+不加 `--overwrite` 时，如果 `config/openbench/` 已有配置，命令会安全停止。
 
 ## 13. 刷新实验记录
 

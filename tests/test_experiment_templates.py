@@ -21,12 +21,20 @@ def run(*args:str,ok:bool=True)->subprocess.CompletedProcess:
     return result
 
 
+def tree_hash(root:Path)->str:
+    digest=hashlib.sha256()
+    for path in sorted(x for x in root.rglob('*') if x.is_file()):
+        digest.update(str(path.relative_to(root)).encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 @unittest.skipUnless(REPO.is_dir(),'local CoLM checkout unavailable')
 class ExperimentTemplateTests(unittest.TestCase):
     def test_all_regions_and_job_stages(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);cases=root/'cases';cases.mkdir()
-            expected={'USA':28,'SA':14,'Mekong':14,'Global':14}
+            expected={'USA':36,'SA':18,'Mekong':18,'Global':18}
             for index,(region,count) in enumerate(expected.items(),901):
                 run(str(TOOLS/'dlb_01_create_experiment.py'),f'EXP{index}','smoke',region,
                     '--repo-root',str(REPO),'--case-root',str(cases),
@@ -41,9 +49,20 @@ class ExperimentTemplateTests(unittest.TestCase):
                 for config in yaml_files:
                     text=config.read_text()
                     self.assertNotIn('__',text)
-                    self.assertIn('E0_CTL:',text)
+                    if config.stem not in ('streamflow_spinup','inundation_spinup'):
+                        self.assertIn('E0_CTL:',text)
                     self.assertIn('_hist_unitcat_',text)
                     if yaml:yaml.safe_load(text)
+                for basin_dir in (exp/'config/openbench').iterdir():
+                    self.assertTrue((basin_dir/'streamflow_DLB.yaml').is_file())
+                    self.assertFalse((basin_dir/'streamflow_ALL.yaml').exists())
+                    for name in ('streamflow_spinup.yaml','inundation_spinup.yaml',
+                                 'streamflow_ctl.yaml','inundation_ctl.yaml'):
+                        self.assertTrue((basin_dir/name).is_file())
+                    self.assertIn('years: [1996, 1999]',
+                                  (basin_dir/'streamflow_spinup.yaml').read_text())
+                    self.assertIn('enabled: false',
+                                  (basin_dir/'streamflow_ctl.yaml').read_text())
                 self.assertEqual(list(cases.iterdir()),[],'create must not create cases')
                 self.assertNotIn(str(exp.parent/f'.EXP{index}_smoke_{region}'),
                                  (exp/'config/colm/run_manifest.json').read_text())
@@ -55,6 +74,17 @@ class ExperimentTemplateTests(unittest.TestCase):
                 self.assertNotIn('mksrfdata.x',dam)
                 self.assertIn('STEPS colm',formal)
                 self.assertNotIn('mkinidata.x',formal)
+                helper=(exp/'config/jobs/submit_batch.sh').read_text()
+                self.assertIn('JOB_DIR="$SCRIPT_DIR"',helper)
+                self.assertNotIn(f'JOB_DIR={exp}',helper)
+                moved=root/f'moved_{region}'
+                exp.rename(moved)
+                preview=subprocess.run(
+                    ['bash',str(moved/'config/jobs/submit_batch.sh'),'--dry-run',
+                     '--stage','dam-init'],text=True,capture_output=True)
+                self.assertEqual(preview.returncode,0,preview.stderr or preview.stdout)
+                self.assertIn('submit_D_INIT.lsf',preview.stdout)
+                moved.rename(exp)
             duplicate=run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP901','smoke','USA',
                 '--repo-root',str(REPO),'--case-root',str(cases),
                 '--experiments-root',str(root/'experiments'),'--draft',ok=False)
@@ -93,6 +123,41 @@ class ExperimentTemplateTests(unittest.TestCase):
             self.assertEqual(manifest['paths']['repo_root'],str(REPO.resolve()))
             self.assertEqual(manifest['paths']['case_root'],
                 '/share/home/dq134/wzx/CoLM/cases')
+
+    def test_default_experiments_root_is_documented(self):
+        result=run(str(TOOLS/'dlb_01_create_experiment.py'),'--help')
+        self.assertIn('/share/home/dq134/wzx/CoLM/DLB_nml',result.stdout)
+
+    def test_component_regeneration_and_backups(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);cases=root/'cases';cases.mkdir();target=root/'experiment'
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP963','components','Mekong',
+                '--repo-root',str(REPO),'--case-root',str(cases),
+                '--output-dir',str(target),'--draft')
+            colm_before=tree_hash(target/'config/colm')
+            jobs_before=tree_hash(target/'config/jobs')
+            refused=run(str(TOOLS/'dlb_08_generate_openbench.py'),str(target),ok=False)
+            self.assertNotEqual(refused.returncode,0)
+            run(str(TOOLS/'dlb_08_generate_openbench.py'),str(target),
+                '--eval-start-year','2002','--eval-end-year','2004','--overwrite')
+            self.assertEqual(tree_hash(target/'config/colm'),colm_before)
+            self.assertEqual(tree_hash(target/'config/jobs'),jobs_before)
+            self.assertIn('years: [2002, 2004]',
+                          (target/'config/openbench/mekong/streamflow_D.yaml').read_text())
+            backups=target/'provenance/backups'
+            self.assertTrue(any((path/'openbench').is_dir() for path in backups.iterdir()))
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),
+                '--experiment-dir',str(target),'--overwrite')
+            self.assertTrue((target/'config/colm/run_manifest.json').is_file())
+            self.assertTrue((target/'config/jobs/submit_batch.sh').is_file())
+            self.assertTrue(any((path/'colm').is_dir() and (path/'jobs').is_dir()
+                                for path in backups.iterdir()))
+            marker=target/'config/jobs/markers/SPINUP.success'
+            marker.parent.mkdir();marker.touch()
+            blocked=run(str(TOOLS/'dlb_02_generate_namelists.py'),
+                '--experiment-dir',str(target),'--overwrite',ok=False)
+            self.assertNotEqual(blocked.returncode,0)
+            self.assertIn('run products exist',blocked.stderr)
 
     def test_transactional_restart_donor_selection(self):
         try:

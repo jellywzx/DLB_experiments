@@ -11,4 +11,11 @@ Regional CoLM DLB factorial suite. Creation only rendered configuration; it did 
 5. For each OpenBench YAML: `openbench check CONFIG.yaml` then `openbench run CONFIG.yaml`.
 6. Record OpenBench results and refresh metadata with `python __TOOLS_DIR__/dlb_07_refresh_experiment.py __EXP_DIR__`.
 
+## Regenerate one component
+
+- CoLM namelists and jobs: `python __TOOLS_DIR__/dlb_02_generate_namelists.py --experiment-dir __EXP_DIR__ --overwrite`
+- OpenBench YAML only: `python __TOOLS_DIR__/dlb_08_generate_openbench.py __EXP_DIR__ --overwrite`
+
+Both commands back up the replaced configuration under `provenance/backups/`.
+
 No scheduler dependency is created automatically.
