@@ -572,7 +572,7 @@ def main() -> int:
     parser.add_argument('--overwrite', action='store_true',
                         help='Overwrite only generated names, never delete unrelated files')
     parser.add_argument('--forcing-root',type=Path)
-    args = parse_site_args(parser)
+    args = parse_site_args(parser,recorded_options=('--experiment-dir',))
 
     if args.experiment_dir:
         if args.site_config:die('--experiment-dir uses its recorded server profile; omit --site-config')

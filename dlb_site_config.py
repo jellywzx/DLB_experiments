@@ -39,27 +39,52 @@ def load_profile(path: Path) -> dict:
     return data
 
 
-def parse_site_args(parser):
-    """Apply profile defaults before parsing, so explicit CLI options take priority."""
-    parser.add_argument('--site-config', type=Path, help='JSON server profile; explicit options override it')
-    preliminary = argparse.ArgumentParser(add_help=False)
-    preliminary.add_argument('--site-config', type=Path)
-    selected, _ = preliminary.parse_known_args()
-    profile = load_profile(selected.site_config) if selected.site_config else {}
-    actions = {a.dest: a for a in parser._actions}
-    for key, value in profile.items():
-        if key in actions:
-            actions[key].required = False
-    parser.set_defaults(**{k:v for k,v in profile.items() if k in actions})
-    args = parser.parse_args()
+def parse_site_args(parser, *, use_env=True, recorded_options=()):
+    """CLI profile > DLB_SITE_CONFIG > legacy defaults.
+
+    Existing-experiment operations retain their recorded settings unless a CLI
+    profile is explicitly provided. --no-site-config disables automatic loading.
+    """
+    help_text='JSON server profile (default: DLB_SITE_CONFIG); explicit options override it'
+    selection=parser.add_mutually_exclusive_group()
+    selection.add_argument('--site-config',type=Path,help=help_text)
+    selection.add_argument('--no-site-config',action='store_true',
+                           help='Ignore DLB_SITE_CONFIG for this command')
+    preliminary=argparse.ArgumentParser(add_help=False)
+    preliminary.add_argument('--site-config',type=Path)
+    preliminary.add_argument('--no-site-config',action='store_true')
+    preliminary.add_argument('-h','--help',action='store_true')
+    for option in recorded_options:preliminary.add_argument(option)
+    selected,_=preliminary.parse_known_args()
+    if selected.help:
+        return parser.parse_args()  # argparse prints help without opening a profile
+    recorded=any(getattr(selected,option.lstrip('-').replace('-','_')) is not None
+                 for option in recorded_options)
+    profile_path=selected.site_config
+    source='cli' if profile_path else 'default'
+    if selected.no_site_config:
+        source='disabled'
+    elif not profile_path and use_env and not recorded:
+        env_path=os.environ.get('DLB_SITE_CONFIG')
+        if env_path:
+            profile_path=Path(env_path)
+            source='environment'
+    profile=load_profile(profile_path) if profile_path else {}
+    actions={a.dest:a for a in parser._actions}
+    for key in profile:
+        if key in actions:actions[key].required=False
+    parser.set_defaults(**{k:v for k,v in profile.items() if k in actions},
+                        site_config=profile_path)
+    args=parser.parse_args()
     for key,value in vars(args).items():
         if key in PATH_KEYS and isinstance(value,Path):
             setattr(args,key,value.expanduser().absolute())
     effective={**profile,**{k:v for k,v in vars(args).items() if k in KEYS}}
-    args.site_metadata = {
-        'path': str(selected.site_config.expanduser().absolute()) if selected.site_config else None,
-        'sha256': hashlib.sha256(selected.site_config.expanduser().read_bytes()).hexdigest() if selected.site_config else None,
-        'effective': {k: str(v) if isinstance(v, Path) else v for k,v in effective.items()}}
+    args.site_metadata={
+        'path':str(profile_path.expanduser().absolute()) if profile_path else None,
+        'sha256':hashlib.sha256(profile_path.expanduser().read_bytes()).hexdigest() if profile_path else None,
+        'selection':source,
+        'effective':{k:str(v) if isinstance(v,Path) else v for k,v in effective.items()}}
     return args
 
 

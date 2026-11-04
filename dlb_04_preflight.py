@@ -30,7 +30,7 @@ def main()->int:
     for key in ('case-root','rawdata','runtime','soil-init','template','mask-root','forcing-root'):
         p.add_argument('--'+key,type=Path)
     p.add_argument('--forcing-nml',default='JRA3Q')
-    args=parse_site_args(p)
+    args=parse_site_args(p,recorded_options=('--nml-dir',))
     if not args.nml_dir:
         if not args.site_config:p.error('--nml-dir or --site-config is required')
         required=('repo_root','case_root','rawdata','runtime','soil_init','mask_root')

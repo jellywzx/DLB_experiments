@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -66,10 +67,11 @@ def tearDownModule():
     FIXTURE.cleanup()
 
 
-def run(*args:str,ok:bool=True)->subprocess.CompletedProcess:
+def run(*args:str,ok:bool=True,env:dict|None=None)->subprocess.CompletedProcess:
     if args and Path(args[0]).name=='dlb_01_create_experiment.py' and '--mask-root' not in args:
         args=(*args,'--mask-root',str(MASKS))
-    result=subprocess.run([str(PYTHON),*args],text=True,capture_output=True)
+    result=subprocess.run([str(PYTHON),*args],text=True,capture_output=True,
+                          env={k:v for k,v in os.environ.items() if k!='DLB_SITE_CONFIG'} if env is None else env)
     if ok and result.returncode:
         raise AssertionError(result.stderr or result.stdout)
     return result
@@ -450,6 +452,73 @@ class ExperimentTemplateTests(unittest.TestCase):
             self.assertIn('submit_SPINUP.slurm',preview.stdout)
             for job in (moved/'config/jobs').glob('*.slurm'):
                 subprocess.run(['bash','-n',str(job)],check=True)
+
+
+    def test_global_profile_selection_and_switch_off(self):
+        import argparse
+        from unittest.mock import patch
+        from dlb_site_config import parse_site_args
+        def parse(argv,env_path):
+            parser=argparse.ArgumentParser()
+            parser.add_argument('--cores',type=int,default=240)
+            parser.add_argument('--repo-root',type=Path)
+            parser.add_argument('--exclusive',action=argparse.BooleanOptionalAction,default=False)
+            with patch.dict(os.environ,{'DLB_SITE_CONFIG':env_path}),patch('sys.argv',['test',*argv]):
+                return parse_site_args(parser)
+        args=parse([],str(PROFILE))
+        self.assertEqual(args.cores,144)
+        self.assertTrue(args.exclusive)
+        self.assertEqual(args.site_config,PROFILE)
+        self.assertEqual(args.site_metadata['selection'],'environment')
+        self.assertEqual(args.site_metadata['sha256'],hashlib.sha256(PROFILE.read_bytes()).hexdigest())
+        args=parse(['--cores','72','--no-exclusive'],str(PROFILE))
+        self.assertEqual(args.cores,72)
+        self.assertFalse(args.exclusive)
+        args=parse(['--site-config',str(PROFILE)],str(ROOT/'missing.json'))
+        self.assertEqual(args.site_metadata['selection'],'cli')
+        args=parse(['--no-site-config'],str(ROOT/'missing.json'))
+        self.assertEqual(args.cores,240)
+        self.assertIsNone(args.site_config)
+        self.assertEqual(args.site_metadata['selection'],'disabled')
+        args=parse([],'')
+        self.assertEqual(args.cores,240)
+        self.assertEqual(args.site_metadata['selection'],'default')
+        with self.assertRaises(FileNotFoundError):parse([],str(ROOT/'missing.json'))
+
+    def test_global_profile_command_entries_and_recorded_operations(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);exp=root/'experiment'
+            env={**os.environ,'DLB_SITE_CONFIG':str(PROFILE)}
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP976','globalconfig','Mekong',
+                '--output-dir',str(exp),env=env)
+            before=json.loads((exp/'config/colm/run_manifest.json').read_text())
+            self.assertEqual(before['site_config']['selection'],'environment')
+            self.assertEqual(before['resources']['scheduler'],'slurm')
+            audit=run(str(TOOLS/'dlb_04_preflight.py'),'--region','Mekong',env=env)
+            self.assertIn(str(PROFILE),audit.stdout)
+            flat=root/'flat'
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--out-dir',str(flat),
+                '--region','Mekong','--include-dam-init',env=env)
+            self.assertTrue((flat/'run_manifest.json').is_file())
+            jobs=root/'jobs'
+            run(str(TOOLS/'dlb_03_generate_jobs.py'),'--nml-dir',str(flat),'--out-dir',str(jobs),env=env)
+            self.assertIn('mpirun -np 144',(jobs/'submit_SPINUP.slurm').read_text())
+            # A bad global path must not affect operations on a recorded study.
+            bad_env={**os.environ,'DLB_SITE_CONFIG':str(root/'missing.json')}
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--experiment-dir='+str(exp),'--overwrite',env=bad_env)
+            after=json.loads((exp/'config/colm/run_manifest.json').read_text())
+            self.assertEqual(after['site_config'],before['site_config'])
+            self.assertEqual(after['resources'],before['resources'])
+            run(str(TOOLS/'dlb_04_preflight.py'),'--nml-dir='+str(exp/'config/colm'),
+                '--phase','inputs',env=bad_env)
+            run(str(TOOLS/'dlb_08_generate_openbench.py'),str(exp),'--overwrite',env=bad_env)
+            explicit=root/'explicit'
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP977','explicit','Mekong',
+                '--site-config',str(PROFILE),'--output-dir',str(explicit),env=bad_env)
+            # --help remains usable even when a global profile path is invalid.
+            result=run(str(TOOLS/'dlb_01_create_experiment.py'),'--help',env=bad_env)
+            self.assertIn('--no-site-config',result.stdout)
+            self.assertEqual(list((ROOT/'cases').iterdir()),[])
 
 
 if __name__=='__main__':unittest.main()

@@ -7,7 +7,8 @@
 ## 本机服务器配置（weizx24）
 
 本机使用独立配置 `configs/servers/weizx24.json`，无需修改旧服务器默认值。
-优先级为 **显式命令行参数 > 服务器配置 > 原有默认值**；省略 `--site-config` 时沿用原入口。
+优先级为 **显式命令行参数 > 选中的服务器配置 > 原有默认值**。
+配置文件的选择顺序为 `--site-config` > 环境变量 `DLB_SITE_CONFIG`；两者均未设置时沿用原入口。
 需要 Python 3.10 或更新版本。配置文件中的相对路径以该 JSON 所在目录为基准，命令行相对路径以当前目录为基准。
 
 ```bash
@@ -26,6 +27,33 @@ python3 "$DLB_ROOT/dlb_01_create_experiment.py" EXP101 local Mekong \
 python3 "$DLB_ROOT/dlb_01_create_experiment.py" EXP102 local Mekong \
   --site-config "$DLB_SITE"
 ```
+
+日常使用可以打开一次全局开关，后续创建、单独生成 namelist/作业、服务器预检都无需重复传 `--site-config`：
+
+```bash
+export DLB_SITE_CONFIG="$DLB_ROOT/configs/servers/weizx24.json"
+
+python3 "$DLB_ROOT/dlb_01_create_experiment.py" EXP103 local Mekong --draft
+python3 "$DLB_ROOT/dlb_04_preflight.py" --check-netcdf --check-forcing-files
+
+# 本条命令临时关闭自动加载；恢复原默认值，显式参数仍有效。
+python3 "$DLB_ROOT/dlb_01_create_experiment.py" --no-site-config --help
+
+# 关闭当前终端的全局开关。
+unset DLB_SITE_CONFIG
+```
+
+如需新终端默认启用，可自行将以下一行写入 `~/.bashrc`：
+
+```bash
+export DLB_SITE_CONFIG=/home/weizx24/weizx24/DLB_experiments_new/configs/servers/weizx24.json
+```
+
+仅设置 `DLB_SITE` 不会自动加载配置；该变量仍可用于显式 `--site-config "$DLB_SITE"`。
+显式 `--site-config` 可覆盖全局配置，单个资源/路径参数又可覆盖配置内的对应值。
+配置路径错误时明确报错，不会静默回退。
+已有实验的 `--experiment-dir` 再生成、`--nml-dir` 预检及 OpenBench 再生成默认使用实验记录，
+不受全局开关影响；OpenBench 仍可通过显式 `--site-config` 或 `--mask-root` 更换掩膜路径。
 
 本机默认使用 Slurm `second`、1 节点、144 MPI 进程、100G、48 小时、exclusive，
 从作业环境的 PATH 查找 `mpirun`，不固定节点、不加载旧 MPI/Intel 脚本。

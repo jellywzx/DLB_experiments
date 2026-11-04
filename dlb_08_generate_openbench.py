@@ -90,7 +90,7 @@ def main()->int:
     p.add_argument('--overwrite',action='store_true',
                    help='Atomically replace only config/openbench and back up the old YAML')
     p.add_argument('--mask-root',type=Path,help='Basin masks; default from recorded server configuration')
-    args=parse_site_args(p)
+    args=parse_site_args(p,use_env=False)  # Existing experiment keeps its recorded mask root
     root=args.experiment_dir.resolve();manifest_path=root/'manifest.yaml'
     if not manifest_path.is_file():raise ValueError(f'missing experiment manifest: {manifest_path}')
     manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
