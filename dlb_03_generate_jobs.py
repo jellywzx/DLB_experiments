@@ -34,29 +34,27 @@ def script_body(label:str,case:str,nml:Path,run_dir:Path,steps:list[str],job_dir
                 log_dir:Path,scheduler:str,queue:str,cores:int,tpn:int,mem:str,walltime:str,
                 launcher:str,workdir:Path,mpi_root:Path|None,intel_env:Path|None)->str:
     name=case[:100]
-    log_rel=Path(os.path.relpath(log_dir,job_dir))
-    nml_rel=os.path.relpath(nml,job_dir)
     lines=['#!/usr/bin/env bash']
     if scheduler=='lsf':
         lines.extend([f'#BSUB -J {name}',f'#BSUB -q {queue}',f'#BSUB -n {cores}',
                       f'#BSUB -W {walltime}',f'#BSUB -R "span[ptile={tpn}]"',
                       f'#BSUB -R "rusage[mem={mem}]"',
-                      f'#BSUB -o {log_rel}/{label}.%J.out',
-                      f'#BSUB -e {log_rel}/{label}.%J.err'])
+                      f'#BSUB -o {log_dir}/{label}.%J.out',
+                      f'#BSUB -e {log_dir}/{label}.%J.err',
+                      '#BSUB -env "all,LSB_STDOUT_DIRECT=Y"'])
     else:
         nodes=math.ceil(cores/tpn)
         lines.extend([f'#SBATCH --job-name={name}',f'#SBATCH --partition={queue}',
                       f'#SBATCH --nodes={nodes}',f'#SBATCH --ntasks={cores}',
                       f'#SBATCH --ntasks-per-node={tpn}',f'#SBATCH --time={walltime}',
-                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_rel}/{label}.%j.out',
-                      f'#SBATCH --error={log_rel}/{label}.%j.err'])
-    lines.extend(['','set -euo pipefail',
-                  'SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"'])
+                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_dir}/{label}.%j.out',
+                      f'#SBATCH --error={log_dir}/{label}.%j.err'])
+    lines.extend(['','set -euo pipefail'])
     if intel_env:
         lines.append(f'source {sq(intel_env)}')
     lines.extend(['export OMP_NUM_THREADS=1','export HDF5_USE_FILE_LOCKING=FALSE','ulimit -s unlimited',
-        f'cd {sq(workdir)}',f'RUN_DIR={sq(run_dir)}',f'NML="$SCRIPT_DIR"/{sq(nml_rel)}',
-        f'MARKER="$SCRIPT_DIR/markers/{label}.success"',
+        f'cd {sq(workdir)}',f'RUN_DIR={sq(run_dir)}',f'NML={sq(nml)}',
+        f'MARKER={sq(job_dir/"markers"/f"{label}.success")}',
         'test -f "$NML" || { echo "Missing NML: $NML" >&2; exit 1; }',
         'mkdir -p "$(dirname "$MARKER")"',
         'rm -f "$MARKER"  # delete only this script-owned success marker',
@@ -115,8 +113,8 @@ elif [[ "$STAGE" == dam-init ]]; then
   PHASE=dam-init
   ONLY=all
 else
-  # Start potentially expensive BIF experiments earlier; no scientific dependency among the eight.
-  ORDER=(E7_ALL E6_LB E5_DB E3_B E4_DL E1_D E2_L E0_CTL)
+  # Submit from the control case toward the full-feature combination.
+  ORDER=(E0_CTL E2_L E1_D E4_DL E3_B E5_DB E6_LB E7_ALL)
   PHASE=experiments
   if [[ "$ONLY" == all ]]; then
     JOBS=("${{ORDER[@]}}")

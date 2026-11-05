@@ -72,11 +72,20 @@ class ExperimentTemplateTests(unittest.TestCase):
                 self.assertIn('STEPS mksrfdata mkinidata colm',spin)
                 self.assertIn('STEPS mkinidata',dam)
                 self.assertNotIn('mksrfdata.x',dam)
+                self.assertIn(f'#BSUB -o {exp}/logs/D_INIT.%J.out',dam)
+                self.assertIn(f'#BSUB -e {exp}/logs/D_INIT.%J.err',dam)
+                self.assertIn('#BSUB -env "all,LSB_STDOUT_DIRECT=Y"',dam)
+                self.assertNotIn('#BSUB -o ../../logs',dam)
+                resolution='0p5' if region=='Global' else '0p1'
+                self.assertIn(f'NML={exp}/config/colm/{exp.name}_D_INIT_{resolution}.nml',dam)
+                self.assertIn(f'MARKER={exp}/config/jobs/markers/D_INIT.success',dam)
+                self.assertNotIn('BASH_SOURCE',dam)
                 self.assertIn('STEPS colm',formal)
                 self.assertNotIn('mkinidata.x',formal)
                 helper=(exp/'config/jobs/submit_batch.sh').read_text()
                 self.assertIn('JOB_DIR="$SCRIPT_DIR"',helper)
                 self.assertNotIn(f'JOB_DIR={exp}',helper)
+                self.assertIn('ORDER=(E0_CTL E2_L E1_D E4_DL E3_B E5_DB E6_LB E7_ALL)',helper)
                 moved=root/f'moved_{region}'
                 exp.rename(moved)
                 preview=subprocess.run(
