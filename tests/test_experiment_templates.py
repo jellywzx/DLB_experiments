@@ -29,6 +29,62 @@ def tree_hash(root:Path)->str:
     return digest.hexdigest()
 
 
+class PreprocessorMacroTests(unittest.TestCase):
+    def test_inactive_undef_does_not_override_active_definition(self):
+        from dlb_00_workflow_common import preprocessor_state
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'define.h'
+            path.write_text('''#define LULC_IGBP_PFT
+#undef LULC_IGBP_PC
+#define USEMPI
+#if (defined URBAN_MODEL && defined SinglePoint)
+#undef LULC_IGBP_PFT
+#endif
+#if (defined SinglePoint)
+#undef USEMPI
+#endif
+''')
+            state=preprocessor_state(path)
+            self.assertTrue(state['LULC_IGBP_PFT'])
+            self.assertFalse(state['LULC_IGBP_PC'])
+            self.assertTrue(state['USEMPI'])
+
+    def test_nested_elif_and_active_undef(self):
+        from dlb_00_workflow_common import preprocessor_state
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'define.h'
+            path.write_text('''#define BASE
+#if defined(BASE)
+#if defined(MISSING)
+#define WRONG_BRANCH
+#elif !defined(OTHER)
+#undef BASE
+#define SELECTED_BRANCH
+#else
+#define WRONG_ELSE
+#endif
+#endif
+#ifndef SELECTED_BRANCH
+#define WRONG_IFNDEF
+#endif
+''')
+            state=preprocessor_state(path)
+            self.assertFalse(state['BASE'])
+            self.assertTrue(state['SELECTED_BRANCH'])
+            self.assertNotIn('WRONG_BRANCH',state)
+            self.assertNotIn('WRONG_ELSE',state)
+            self.assertNotIn('WRONG_IFNDEF',state)
+
+    def test_invalid_preprocessor_conditions_fail_clearly(self):
+        from dlb_00_workflow_common import WorkflowError,preprocessor_state
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'define.h'
+            for text in ('#if FEATURE == 1\n#endif\n','#if defined(FEATURE)\n'):
+                with self.subTest(text=text):
+                    path.write_text(text)
+                    with self.assertRaises(WorkflowError):preprocessor_state(path)
+
+
 @unittest.skipUnless(REPO.is_dir(),'local CoLM checkout unavailable')
 class ExperimentTemplateTests(unittest.TestCase):
     def test_all_regions_and_job_stages(self):

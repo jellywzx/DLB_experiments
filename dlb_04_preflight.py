@@ -7,12 +7,12 @@ GridRiverLake transaction/feature metadata, executable, and optional monthly for
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 from dlb_00_workflow_common import (WorkflowError,load_study,select,assignments,string,number,
  path_value,stamp,timefiles,constfiles,validate_restart_filenames,gridriver_file,
- gridriver_integrity,probe_netcdf,ROUTING_FIELDS,LEVEE_FIELDS,BIF_FIELDS,DAM_FIELDS,error_exit)
+ gridriver_integrity,probe_netcdf,preprocessor_state,ROUTING_FIELDS,LEVEE_FIELDS,BIF_FIELDS,
+ DAM_FIELDS,error_exit)
 
 
 def main()->int:
@@ -89,10 +89,7 @@ def main()->int:
         if not macros.is_file():
             errors.append(f'源码宏文件不存在: {macros}')
         else:
-            state={}
-            for l in macros.read_text(encoding='utf-8').splitlines():
-                m=re.match(r'^\s*#(define|undef)\s+(\w+)',l)
-                if m:state[m[2]]=m[1]=='define'
+            state=preprocessor_state(macros)
             for key,expect in {'GRIDBASED':True,'GridRiverLakeFlow':True,'USEMPI':True,
                                'CaMa_Flood':False,'BGC':False,'CROP':False,
                                'MaterialTransport':False}.items():

@@ -39,6 +39,7 @@ import sys
 import tempfile
 from datetime import datetime,timezone
 from pathlib import Path
+from dlb_00_workflow_common import WorkflowError,preprocessor_state
 
 BASE_TEMPLATE = Path('run/examples/Amazon_Grid_25km_IGBP_VG_RiverLake.nml')
 DEFINE_FILE = Path('include/define.h')
@@ -314,67 +315,12 @@ def validate_forcing(path: Path, draft: bool) -> dict[str, object]:
     return info
 
 
-def macro_condition(expression: str, state: dict[str, bool]) -> bool:
-    """Evaluate the defined(NAME), !, &&, || subset used by define.h."""
-    def replace_defined(match: re.Match[str]) -> str:
-        name = match.group(1) or match.group(2)
-        return str(bool(state.get(name, False)))
-
-    expression = re.sub(
-        r'\bdefined\s*(?:\(\s*(\w+)\s*\)|\s+(\w+))', replace_defined, expression)
-    expression = expression.replace('&&', ' and ').replace('||', ' or ')
-    expression = re.sub(r'!(?!=)', ' not ', expression)
-    if re.sub(r'\b(?:True|False|and|or|not)\b|[()\s]', '', expression):
-        die(f'Unsupported preprocessor condition in {DEFINE_FILE}: {expression.strip()}')
-    return bool(eval(expression, {'__builtins__': {}}, {}))
-
-
 def check_macros(repo: Path) -> list[str]:
     path = repo / DEFINE_FILE
     if not path.is_file():
         return [f'Cannot inspect build macros: {path}']
-    content = path.read_text(encoding='utf-8')
-    state: dict[str, bool] = {}
-    # Each frame stores parent-active, whether a branch has matched, and active.
-    conditions: list[list[bool]] = []
-    active = True
-    for line in content.splitlines():
-        directive = re.match(r'^\s*#(if|ifdef|ifndef|elif|else|endif)\b\s*(.*)', line)
-        if directive:
-            kind, argument = directive.groups()
-            if kind in {'if', 'ifdef', 'ifndef'}:
-                if kind == 'if':
-                    matched = macro_condition(argument, state)
-                else:
-                    matched = bool(state.get(argument.strip(), False))
-                    if kind == 'ifndef':
-                        matched = not matched
-                conditions.append([active, matched, active and matched])
-                active = conditions[-1][2]
-            elif kind == 'elif':
-                if not conditions:
-                    die(f'Unexpected #elif in {path}')
-                parent, taken, _ = conditions[-1]
-                matched = not taken and macro_condition(argument, state)
-                conditions[-1] = [parent, taken or matched, parent and matched]
-                active = conditions[-1][2]
-            elif kind == 'else':
-                if not conditions:
-                    die(f'Unexpected #else in {path}')
-                parent, taken, _ = conditions[-1]
-                conditions[-1] = [parent, True, parent and not taken]
-                active = conditions[-1][2]
-            else:
-                if not conditions:
-                    die(f'Unexpected #endif in {path}')
-                parent, _, _ = conditions.pop()
-                active = parent
-            continue
-        match = re.match(r'^\s*#(define|undef)\s+(\w+)\b', line)
-        if active and match:
-            state[match.group(2)] = match.group(1) == 'define'
-    if conditions:
-        die(f'Unclosed preprocessor condition in {path}')
+    try:state=preprocessor_state(path)
+    except WorkflowError as exc:die(str(exc))
     desired = {
         'GRIDBASED': True, 'GridRiverLakeFlow': True, 'USEMPI': True,
         'LULC_IGBP_PFT': True, 'CaMa_Flood': False, 'BGC': False,
