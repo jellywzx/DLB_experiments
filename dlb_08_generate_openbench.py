@@ -12,6 +12,8 @@ import tempfile
 from datetime import datetime,timezone
 from pathlib import Path
 
+from dlb_site_config import parse_site_args,basin_specs
+
 MASK_ROOT=Path('/share/home/dq134/wzx/openbench/postprocess/basin_mask/outputs')
 BASINS={
     'USA':(
@@ -87,7 +89,8 @@ def main()->int:
     p.add_argument('--no-refresh',action='store_true',help=argparse.SUPPRESS)
     p.add_argument('--overwrite',action='store_true',
                    help='Atomically replace only config/openbench and back up the old YAML')
-    args=p.parse_args()
+    p.add_argument('--mask-root',type=Path,help='Basin masks; default from recorded server configuration')
+    args=parse_site_args(p,use_env=False)  # Existing experiment keeps its recorded mask root
     root=args.experiment_dir.resolve();manifest_path=root/'manifest.yaml'
     if not manifest_path.is_file():raise ValueError(f'missing experiment manifest: {manifest_path}')
     manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
@@ -99,8 +102,12 @@ def main()->int:
     start=args.eval_start_year if args.eval_start_year is not None else default_eval.get('start_year',2001)
     end=args.eval_end_year if args.eval_end_year is not None else default_eval.get('end_year',2005)
     if not 2000<=start<=end<=2005:raise ValueError('evaluation years must be within 2000–2005')
-    for mask in (x[3] for x in BASINS[region]):
-        if mask and not mask.is_file():raise ValueError(f'missing basin mask: {mask}')
+    saved=manifest.get('site_config',{}).get('effective',{})
+    mask_root=args.mask_root or Path(default_eval.get('mask_root',saved.get('mask_root',MASK_ROOT)))
+    basins=basin_specs(BASINS,region,mask_root,MASK_ROOT)
+    mask_issues=[f'missing basin mask: {mask}' for _,_,_,mask in basins if mask and not mask.is_file()]
+    if mask_issues and not colm.get('draft'):raise ValueError('\n'.join(mask_issues))
+    for issue in mask_issues:print('WARNING [draft]: '+issue,file=sys.stderr)
     case_root=Path(colm['paths']['case_root'])
     runs=colm['runs']['experiments'][region]
     by_label={x['label']:{'label':x['label'],'history_root':case_root/x['case']/'history',
@@ -118,7 +125,7 @@ def main()->int:
     old_projects={x['project']:x for x in default_eval.get('projects',[])}
     projects=[];grid=0.25 if region=='Global' else 0.1
     try:
-        for basin in BASINS[region]:
+        for basin in basins:
             basin_dir=temporary/basin[0];basin_dir.mkdir()
             for treatment in TREATMENTS:
                 short='DLB' if treatment=='E7_ALL' else treatment.split('_',1)[1]
@@ -161,7 +168,8 @@ def main()->int:
         try:
             os.rename(temporary,destination)
             manifest.setdefault('configuration',{})['openbench']='config/openbench'
-            manifest['evaluation']={'start_year':start,'end_year':end,'projects':projects}
+            manifest['evaluation']={'start_year':start,'end_year':end,'projects':projects,
+                                    'mask_root':str(mask_root),'validation_issues':mask_issues}
             manifest['openbench_generated_at']=datetime.now(timezone.utc).isoformat()
             write_json_atomic(manifest_path,manifest)
         except Exception:

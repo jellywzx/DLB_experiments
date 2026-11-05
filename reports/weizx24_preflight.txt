@@ -1,0 +1,23 @@
+新仓库本机 DLB 只读预检报告
+日期：2026-11-04（Asia/Shanghai）
+远端基础：7f1a362
+本地分支：integrate/weizx24-site
+
+命令：python3 /home/weizx24/weizx24/DLB_experiments_new/dlb_04_preflight.py --site-config /home/weizx24/weizx24/DLB_experiments_new/configs/servers/weizx24.json --check-netcdf --check-forcing-files
+
+PROFILE /home/weizx24/weizx24/DLB_experiments_new/configs/servers/weizx24.json
+REGIONS USA SA Mekong Global
+WARN  MaterialTransport: define.h=unknown, study requires False
+WARN  Macros describe the SOURCE tree, not necessarily the already-built executable; rebuild after changing include/define.h.
+WARN  Source checks do not prove compiled binary compatibility; no model or scheduler command was executed.
+FAIL  Unsupported namelist field DEF_GridRiverLake_FloodFeedback: /home/weizx24/weizx24/colm/CoLM_0914/share/MOD_Namelist.F90
+FAIL  Unsupported namelist field DEF_UnitCatchment_regional: /home/weizx24/weizx24/colm/CoLM_0914/share/MOD_Namelist.F90
+SUMMARY: 2 FAIL, 3 WARN
+
+退出码：1
+
+本次检查未发现输入目录、SoilInit、所需流域掩膜、模型可执行文件权限、06min/15min routing/reservoir 必要变量或 JRA3Q 1996–2005 的 960 个逐月文件名缺失。文件名检查不能验证 NetCDF 内容和时间轴。
+
+剩余阻塞来自 CoLM 源码接口：缺少 DEF_UnitCatchment_regional、DEF_GridRiverLake_FloodFeedback。正式生成会报错，草稿仍可预览。这不是 Git 合并冲突。
+MaterialTransport 未显式声明，仍需确认源码宏和实际二进制一致；Slurm/MPI 尚未通过真实作业验证。未修改 CoLM 源码、编译或提交模型作业。
+实验父目录已设为新仓库，掩膜继续引用旧仓库的 basin_mask/outputs，请保留旧数据目录。

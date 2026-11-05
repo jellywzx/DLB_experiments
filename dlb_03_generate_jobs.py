@@ -7,12 +7,14 @@ and when explicitly --submit, runs preflight with NetCDF & forcing-file checks.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import re
 import shlex
 import sys
 from pathlib import Path
+from dlb_site_config import parse_site_args
 from dlb_00_workflow_common import WorkflowError,load_study,error_exit
 
 
@@ -32,7 +34,7 @@ def hpc_time(raw:str,scheduler:str)->str:
 
 def script_body(label:str,case:str,nml:Path,run_dir:Path,steps:list[str],job_dir:Path,
                 log_dir:Path,scheduler:str,queue:str,cores:int,tpn:int,mem:str,walltime:str,
-                launcher:str,workdir:Path,mpi_root:Path|None,intel_env:Path|None)->str:
+                launcher:str,workdir:Path,mpi_root:Path|None,intel_env:Path|None,exclusive:bool=False,node:str|None=None)->str:
     name=case[:100]
     lines=['#!/usr/bin/env bash']
     if scheduler=='lsf':
@@ -47,6 +49,13 @@ def script_body(label:str,case:str,nml:Path,run_dir:Path,steps:list[str],job_dir
         lines.extend([f'#SBATCH --job-name={name}',f'#SBATCH --partition={queue}',
                       f'#SBATCH --nodes={nodes}',f'#SBATCH --ntasks={cores}',
                       f'#SBATCH --ntasks-per-node={tpn}',f'#SBATCH --time={walltime}',
+                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_rel}/{label}.%j.out',
+                      f'#SBATCH --error={log_rel}/{label}.%j.err'])
+    if scheduler=='slurm':
+        if exclusive:lines.append('#SBATCH --exclusive')
+        if node:lines.append(f'#SBATCH --nodelist={node}')
+    lines.extend(['','set -euo pipefail',
+                  'SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"'])
                       f'#SBATCH --mem={mem}',f'#SBATCH --output={log_dir}/{label}.%j.out',
                       f'#SBATCH --error={log_dir}/{label}.%j.err'])
     lines.extend(['','set -euo pipefail'])
@@ -147,7 +156,8 @@ def main()->int:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--nml-dir',required=True,type=Path)
     p.add_argument('--scheduler',required=True,choices=['lsf','slurm'])
-    p.add_argument('--exe',required=True,type=Path)
+    p.add_argument('--exe',type=Path)
+    p.add_argument('--repo-root',type=Path)
     p.add_argument('--out-dir',type=Path,help='Default: <nml-dir>/jobs_<scheduler>')
     p.add_argument('--log-dir',type=Path,help='Scheduler stdout/stderr directory (default: out-dir)')
     p.add_argument('--queue',required=True,help='Site queue or partition (e.g. normal / deimos)')
@@ -161,7 +171,11 @@ def main()->int:
     p.add_argument('--workdir',type=Path,help='Working directory, defaults to executable parent')
     p.add_argument('--overwrite',action='store_true')
     p.add_argument('--allow-draft',action='store_true',help=argparse.SUPPRESS)
-    args=p.parse_args()
+    p.add_argument('--exclusive',action=argparse.BooleanOptionalAction,default=False)
+    p.add_argument('--node',help='Optional fixed Slurm node')
+    args=parse_site_args(p)
+    if args.exe is None and args.repo_root: args.exe=args.repo_root/'run/colm.x'
+    if args.exe is None: p.error('--exe or a profile repo_root is required')
     study=load_study(args.nml_dir,allow_draft=args.allow_draft)
     exe=args.exe.expanduser().resolve()
     workdir=(args.workdir or exe.parent).expanduser().resolve()
@@ -177,6 +191,10 @@ def main()->int:
         raise WorkflowError('队列名应只包含字母、数字、下划线、点或减号')
     if not re.fullmatch(r'\d+(?:[GMK])?',args.memory,re.I):
         raise WorkflowError('--memory 示例 150G、64G、100000')
+    if args.node and not re.fullmatch(r'[A-Za-z0-9_.-]+',args.node):
+        raise WorkflowError('node must be a single node name')
+    if args.scheduler!='slurm' and (args.node or args.exclusive):
+        raise WorkflowError('--node/--exclusive require Slurm')
     launcher=args.launcher or ('mpirun' if args.scheduler=='lsf' else 'srun')
     wall=hpc_time(args.walltime,args.scheduler)
     files={}
@@ -189,7 +207,9 @@ def main()->int:
           run.label,run.case,run.nml,exe.parent,steps,output,log_dir,args.scheduler,args.queue,
           args.cores,args.tasks_per_node,args.memory,wall,launcher,workdir,
           args.mpi_root.resolve() if args.mpi_root else None,
-          args.intel_env.resolve() if args.intel_env else None)
+          args.intel_env.resolve() if args.intel_env else None,args.exclusive,args.node)
+    args.site_metadata['effective'].update(exe=str(exe),workdir=str(workdir),launcher=launcher)
+    files['site_config.json']=json.dumps(args.site_metadata,indent=2)+'\n'
     files['submit_batch.sh']=submit_helper(args.scheduler,output,study.nml_dir,exe,Path(__file__).resolve().parent)
     exists=[output/k for k in files if (output/k).exists()]
     if exists and not args.overwrite:

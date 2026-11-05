@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -10,12 +12,66 @@ import unittest
 from pathlib import Path
 
 TOOLS=Path(__file__).resolve().parents[1]
-REPO=Path('/share/home/dq134/wzx/CoLM/CoLM202X_1030')
-PYTHON=Path('/share/home/dq134/.conda/envs/wzx/bin/python3')
+PYTHON=Path(sys.executable)
+FIXTURE=tempfile.TemporaryDirectory()
+ROOT=Path(FIXTURE.name)
+REPO=ROOT/'CoLM'
+MASKS=ROOT/'masks'
+PROFILE=ROOT/'server.json'
 
 
-def run(*args:str,ok:bool=True)->subprocess.CompletedProcess:
-    result=subprocess.run([str(PYTHON),*args],text=True,capture_output=True)
+def setUpModule():
+    sys.path.insert(0,str(TOOLS))
+    from dlb_08_generate_openbench import BASINS,MASK_ROOT
+    for rel in ('run/examples','run/forcing','share','include'):
+        (REPO/rel).mkdir(parents=True)
+    base=(TOOLS/'templates/dlb_base.nml').read_text()
+    (REPO/'run/examples/Amazon_Grid_25km_IGBP_VG_RiverLake.nml').write_text(base)
+    keys={n.value.split('%')[0] for n in ast.walk(ast.parse((TOOLS/'dlb_02_generate_namelists.py').read_text()))
+          if isinstance(n,ast.Constant) and isinstance(n.value,str) and n.value.startswith('DEF_')
+          and all(c.isalnum() or c in '_%' for c in n.value)}
+    import re
+    keys.update(re.findall(r'^\s*(DEF_\w+)',base,re.M))
+    members=set(re.findall(r'%(\w+)',base))
+    source='type fixture_type\n integer :: '+', '.join(sorted(members))+'\nend type fixture_type\n'
+    source+='type (fixture_type) :: DEF_domain\ntype (fixture_type) :: DEF_simulation_time\n'
+    source+='namelist /nl_colm/ &\n'+', &\n'.join(sorted(keys))+'\n'
+    (REPO/'share/MOD_Namelist.F90').write_text(source)
+    (REPO/'include/define.h').write_text('\n'.join(
+        '#define '+k for k in ('GRIDBASED','GridRiverLakeFlow','USEMPI','LULC_IGBP_PFT'))+'\n'+
+        '\n'.join('#undef '+k for k in ('CaMa_Flood','BGC','CROP','URBAN_MODEL','LULCC','MaterialTransport')))
+    for name in ('mksrfdata','mkinidata','colm'):
+        file=REPO/'run'/f'{name}.x';file.write_text('#!/bin/sh\nexit 99\n');file.chmod(0o755)
+    for folder in ('rawdata','runtime/unitcatchment','forcing','cases'):
+        (ROOT/folder).mkdir(parents=True)
+    for res in ('06min','15min'):
+        (ROOT/'runtime/unitcatchment'/f'grid_routing_data_{res}.nc').write_bytes(b'fixture')
+    (ROOT/'soilstate.nc').write_bytes(b'fixture')
+    (REPO/'run/forcing/JRA3Q.nml').write_text(
+        "&nl_colm_forcing\n DEF_dir_forcing = '"+str(ROOT/'forcing')+"'\n"
+        " DEF_forcing%dataset = 'JRA3Q'\n DEF_forcing%startyr = 1947\n"
+        " DEF_forcing%startmo = 9\n DEF_forcing%endyr = 2025\n DEF_forcing%endmo = 6\n/\n")
+    for specs in BASINS.values():
+        for _,_,_,mask in specs:
+            if mask:
+                file=MASKS/mask.relative_to(MASK_ROOT);file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(b'mask')
+    PROFILE.write_text(json.dumps(dict(repo_root=str(REPO),case_root=str(ROOT/'cases'),
+        experiments_root=str(ROOT/'experiments'),rawdata=str(ROOT/'rawdata'),runtime=str(ROOT/'runtime'),
+        soil_init=str(ROOT/'soilstate.nc'),mask_root=str(MASKS),forcing_nml='JRA3Q',
+        template=str(TOOLS/'templates/dlb_base.nml'),scheduler='slurm',queue='second',cores=144,
+        tasks_per_node=144,memory='100G',walltime='48:00:00',launcher='mpirun',exclusive=True,
+        mpi_root=None,intel_env=None,no_lsf=True)))
+
+
+def tearDownModule():
+    FIXTURE.cleanup()
+
+
+def run(*args:str,ok:bool=True,env:dict|None=None)->subprocess.CompletedProcess:
+    if args and Path(args[0]).name=='dlb_01_create_experiment.py' and '--mask-root' not in args:
+        args=(*args,'--mask-root',str(MASKS))
+    result=subprocess.run([str(PYTHON),*args],text=True,capture_output=True,
+                          env={k:v for k,v in os.environ.items() if k!='DLB_SITE_CONFIG'} if env is None else env)
     if ok and result.returncode:
         raise AssertionError(result.stderr or result.stdout)
     return result
@@ -183,11 +239,11 @@ class ExperimentTemplateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             target=Path(td)/'minimal_command'
             run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP962','defaults','Mekong',
-                '--output-dir',str(target),'--draft')
+                '--output-dir',str(target),'--site-config',str(PROFILE),'--draft')
             manifest=json.loads((target/'config/colm/run_manifest.json').read_text())
             self.assertEqual(manifest['paths']['repo_root'],str(REPO.resolve()))
             self.assertEqual(manifest['paths']['case_root'],
-                '/share/home/dq134/wzx/CoLM/cases')
+                str(ROOT/'cases'))
 
     def test_default_experiments_root_is_documented(self):
         result=run(str(TOOLS/'dlb_01_create_experiment.py'),'--help')
@@ -291,6 +347,260 @@ class ExperimentTemplateTests(unittest.TestCase):
                 self.assertTrue(regional.is_symlink())
                 self.assertEqual(regional.resolve(),river_source.resolve())
                 self.assertTrue((cases/case/'.aas_restart_handoff.json').is_file())
+
+
+    def test_site_slurm_and_explicit_overrides(self):
+        with tempfile.TemporaryDirectory() as td:
+            exp=Path(td)/'study'
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP970','site','SA',
+                '--site-config',str(PROFILE),'--output-dir',str(exp),
+                '--queue','custom','--cores','72','--tasks-per-node','72','--no-exclusive')
+            manifest=json.loads((exp/'config/colm/run_manifest.json').read_text())
+            self.assertFalse(manifest['draft'])
+            self.assertEqual(manifest['validation_issues'],[])
+            self.assertEqual(manifest['resources']['cores'],72)
+            self.assertEqual(manifest['site_config']['path'],str(PROFILE))
+            self.assertEqual(manifest['site_config']['sha256'],hashlib.sha256(PROFILE.read_bytes()).hexdigest())
+            self.assertEqual(manifest['regions']['SA']['land_resolution_degrees'],0.1)
+            self.assertTrue(manifest['regions']['SA']['routing_grid'].endswith('06min.nc'))
+            for file in exp.rglob('*'):
+                if file.is_file():self.assertNotIn('/share/home/',file.read_text())
+            jobs=exp/'config/jobs'
+            self.assertEqual(len(list(jobs.glob('*.slurm'))),10)
+            for file in [*jobs.glob('*.slurm'),jobs/'submit_batch.sh']:
+                subprocess.run(['bash','-n',str(file)],check=True)
+            spin=(jobs/'submit_SPINUP.slurm').read_text()
+            self.assertIn('--partition=custom',spin)
+            self.assertIn('--nodes=1',spin)
+            self.assertIn('--ntasks=72',spin)
+            self.assertIn('--mem=100G',spin)
+            self.assertIn('--time=48:00:00',spin)
+            self.assertIn('mpirun -np 72',spin)
+            self.assertNotIn('--exclusive',spin)
+            self.assertNotIn('--nodelist',spin)
+            self.assertNotIn('source ',spin)
+            self.assertIn('STEPS mksrfdata mkinidata colm',spin)
+            self.assertIn('STEPS mkinidata',(jobs/'submit_D_INIT.slurm').read_text())
+            self.assertIn('STEPS colm',(jobs/'submit_E7_ALL.slurm').read_text())
+            self.assertEqual(list((ROOT/'cases').iterdir()),[])
+            run(str(TOOLS/'dlb_04_preflight.py'),'--nml-dir',str(exp/'config/colm'),'--phase','inputs')
+
+    def test_standalone_generators_and_profile_defaults(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);out=root/'colm';jobs=root/'jobs'
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--site-config',str(PROFILE),
+                '--out-dir',str(out),'--region','Global','--include-dam-init')
+            self.assertFalse(list(out.glob('*.lsf')))
+            manifest=json.loads((out/'run_manifest.json').read_text())
+            self.assertEqual(manifest['regions']['Global']['land_resolution_degrees'],0.5)
+            self.assertEqual(manifest['regions']['Global']['history_resolution_degrees'],0.25)
+            self.assertTrue(manifest['regions']['Global']['routing_grid'].endswith('15min.nc'))
+            self.assertIn('DEF_TRACER_NUM = 0',(out/'Global_ctl_0p5.nml').read_text())
+            run(str(TOOLS/'dlb_03_generate_jobs.py'),'--site-config',str(PROFILE),
+                '--nml-dir',str(out),'--out-dir',str(jobs),'--node','tms13')
+            spin=(jobs/'submit_SPINUP.slurm').read_text()
+            for flag in ('--exclusive','--nodelist=tms13','--ntasks=144','--nodes=1','mpirun -np 144'):
+                self.assertIn(flag,spin)
+            run(str(TOOLS/'dlb_04_preflight.py'),'--nml-dir',str(out),'--phase','inputs')
+
+    def test_missing_mask_and_input_draft_diagnostics(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);profile=root/'server.json'
+            data=json.loads(PROFILE.read_text());data['rawdata']=str(root/'missing_raw')
+            profile.write_text(json.dumps(data))
+            common=(str(TOOLS/'dlb_01_create_experiment.py'),'EXP971','missing','Mekong',
+                    '--site-config',str(profile),'--mask-root',str(root/'missing_masks'))
+            result=run(*common,'--output-dir',str(root/'strict'),ok=False)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('missing_raw',result.stderr)
+            self.assertIn('mekong_basin.nc',result.stderr)
+            self.assertFalse((root/'strict').exists())
+            run(*common,'--output-dir',str(root/'draft'),'--draft')
+            issues=(root/'draft/provenance/input_validation.txt').read_text()
+            self.assertIn('missing_raw',issues)
+            self.assertIn('mekong_basin.nc',issues)
+            result=run(str(TOOLS/'dlb_04_preflight.py'),'--nml-dir',str(root/'draft/config/colm'),
+                       '--phase','inputs',ok=False)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('draft',result.stderr)
+            checked=subprocess.run(['bash',str(root/'draft/config/jobs/submit_batch.sh'),
+                                    '--submit','--stage','spinup'],capture_output=True,text=True)
+            self.assertNotEqual(checked.returncode,0)
+            self.assertNotIn('SUBMIT:',checked.stdout)
+
+    def test_unsupported_source_fields_are_not_silently_removed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);repo=root/'repo'
+            import shutil
+            shutil.copytree(REPO,repo)
+            source=repo/'share/MOD_Namelist.F90'
+            source.write_text(source.read_text().replace('DEF_GridRiverLake_FloodFeedback, &\n',''))
+            # A declaration elsewhere does not make a field part of NAMELIST /nl_colm/.
+            source.write_text(source.read_text()+'\nlogical :: DEF_GridRiverLake_FloodFeedback\n')
+            common=(str(TOOLS/'dlb_02_generate_namelists.py'),'--site-config',str(PROFILE),
+                    '--repo-root',str(repo),'--region','Mekong')
+            result=run(*common,'--out-dir',str(root/'strict'),ok=False)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('Unsupported namelist field DEF_GridRiverLake_FloodFeedback',result.stderr)
+            self.assertFalse((root/'strict').exists())
+            run(*common,'--out-dir',str(root/'draft'),'--draft')
+            manifest=json.loads((root/'draft/run_manifest.json').read_text())
+            self.assertTrue(any('DEF_GridRiverLake_FloodFeedback' in x for x in manifest['validation_issues']))
+            self.assertIn('DEF_GridRiverLake_FloodFeedback',(root/'draft/Mekong_ctl_0p1.nml').read_text())
+
+    def test_profile_validation_and_relative_template(self):
+        from dlb_site_config import load_profile
+        with tempfile.TemporaryDirectory() as td:
+            profile=Path(td)/'server.json'
+            profile.write_text(json.dumps({'template':'base.nml'}))
+            self.assertEqual(load_profile(profile)['template'],Path(td)/'base.nml')
+            for data in ({'typo':'x'},{'cores':True},{'exclusive':'true'},{'scheduler':'bad'},{'rawdata':None}):
+                profile.write_text(json.dumps(data))
+                with self.assertRaises(ValueError):load_profile(profile)
+        result=run(str(TOOLS/'dlb_01_create_experiment.py'),'--help')
+        self.assertIn('/share/home/dq134/wzx/CoLM/CoLM202X_1030',result.stdout)
+
+    def test_monthly_forcing_supports_local_filename_convention(self):
+        from dlb_site_config import forcing_month_issues
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);nml=root/'forcing.nml'
+            lines=['&nl_colm_forcing',f"DEF_dir_forcing = '{root}'","DEF_forcing%groupby = 'month'"]
+            for i in range(1,9):
+                folder=root/f'v{i}';folder.mkdir()
+                lines.append(f"DEF_forcing%fprefix({i}) = 'v{i}/v{i}'")
+                sep=('_','-','')[i%3]
+                for year in range(1996,2006):
+                    for month in range(1,13):(folder/f'v{i}_{year}{sep}{month:02d}.nc').touch()
+            nml.write_text('\n'.join([*lines,'/']))
+            self.assertEqual(forcing_month_issues(nml),[])
+            (root/'v1/v1_1996-01.nc').unlink()
+            self.assertIn('199601',forcing_month_issues(nml)[0])
+
+    def test_source_member_must_belong_to_its_type(self):
+        from dlb_site_config import unsupported_fields
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);(root/'share').mkdir()
+            (root/'share/MOD_Namelist.F90').write_text(
+                'type domain_type\n real :: edges\nend type domain_type\n'
+                'type (domain_type) :: DEF_domain\nreal :: unrelated_member\n'
+                'namelist /nl_colm/ DEF_domain\n')
+            text='&nl_colm\nDEF_domain%edges = 0\nDEF_domain%unrelated_member = 0\n/\n'
+            errors=unsupported_fields(root,[text])
+            self.assertEqual(len(errors),1)
+            self.assertIn('unrelated_member',errors[0])
+
+
+    def test_site_regeneration_uses_recorded_profile_and_upstream_layout(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);profile=root/'server.json';profile.write_text(PROFILE.read_text())
+            target=root/'experiment'
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP975','regenerate','Mekong',
+                '--site-config',str(profile),'--output-dir',str(target),
+                '--node','tms13','--cores','72','--tasks-per-node','72','--draft')
+            colm_path=target/'config/colm/run_manifest.json'
+            before=json.loads(colm_path.read_text())
+            self.assertEqual(len(list((target/'config/openbench').rglob('*.yaml'))),18)
+            self.assertIn('OpenBench_Streamflow_Daily',
+                          (target/'config/openbench/mekong/streamflow_DLB.yaml').read_text())
+            # Later changes or removal of the external profile must not alter an existing study.
+            profile.write_text('{"invalid_later_edit": true}')
+            openbench_before=tree_hash(target/'config/openbench')
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--experiment-dir',str(target),'--overwrite')
+            after=json.loads(colm_path.read_text())
+            self.assertEqual(after['site_config'],before['site_config'])
+            self.assertEqual(after['resources'],before['resources'])
+            self.assertEqual(after['base_template'],before['base_template'])
+            self.assertEqual(tree_hash(target/'config/openbench'),openbench_before)
+            spin=(target/'config/jobs/submit_SPINUP.slurm').read_text()
+            for value in ('--ntasks=72','--exclusive','--nodelist=tms13','mpirun -np 72','NML="$SCRIPT_DIR"/'):
+                self.assertIn(value,spin)
+            job_meta=json.loads((target/'config/jobs/site_config.json').read_text())
+            self.assertEqual(job_meta['path'],str(profile))
+            self.assertEqual(job_meta['sha256'],before['site_config']['sha256'])
+            for folder in ('colm','jobs'):
+                for file in (target/'config'/folder).iterdir():
+                    if file.is_file():self.assertNotIn('.colm-regenerate.',file.read_text())
+            colm_hash=tree_hash(target/'config/colm');jobs_hash=tree_hash(target/'config/jobs')
+            run(str(TOOLS/'dlb_08_generate_openbench.py'),str(target),'--overwrite')
+            self.assertEqual(tree_hash(target/'config/colm'),colm_hash)
+            self.assertEqual(tree_hash(target/'config/jobs'),jobs_hash)
+            metadata=json.loads((target/'manifest.yaml').read_text())
+            self.assertEqual(metadata['evaluation']['mask_root'],str(MASKS))
+            moved=root/'moved';target.rename(moved)
+            helper=moved/'config/jobs/submit_batch.sh'
+            preview=subprocess.run(['bash',str(helper),'--dry-run','--stage','spinup'],
+                                   text=True,capture_output=True)
+            self.assertEqual(preview.returncode,0,preview.stderr)
+            self.assertIn('submit_SPINUP.slurm',preview.stdout)
+            for job in (moved/'config/jobs').glob('*.slurm'):
+                subprocess.run(['bash','-n',str(job)],check=True)
+
+
+    def test_global_profile_selection_and_switch_off(self):
+        import argparse
+        from unittest.mock import patch
+        from dlb_site_config import parse_site_args
+        def parse(argv,env_path):
+            parser=argparse.ArgumentParser()
+            parser.add_argument('--cores',type=int,default=240)
+            parser.add_argument('--repo-root',type=Path)
+            parser.add_argument('--exclusive',action=argparse.BooleanOptionalAction,default=False)
+            with patch.dict(os.environ,{'DLB_SITE_CONFIG':env_path}),patch('sys.argv',['test',*argv]):
+                return parse_site_args(parser)
+        args=parse([],str(PROFILE))
+        self.assertEqual(args.cores,144)
+        self.assertTrue(args.exclusive)
+        self.assertEqual(args.site_config,PROFILE)
+        self.assertEqual(args.site_metadata['selection'],'environment')
+        self.assertEqual(args.site_metadata['sha256'],hashlib.sha256(PROFILE.read_bytes()).hexdigest())
+        args=parse(['--cores','72','--no-exclusive'],str(PROFILE))
+        self.assertEqual(args.cores,72)
+        self.assertFalse(args.exclusive)
+        args=parse(['--site-config',str(PROFILE)],str(ROOT/'missing.json'))
+        self.assertEqual(args.site_metadata['selection'],'cli')
+        args=parse(['--no-site-config'],str(ROOT/'missing.json'))
+        self.assertEqual(args.cores,240)
+        self.assertIsNone(args.site_config)
+        self.assertEqual(args.site_metadata['selection'],'disabled')
+        args=parse([],'')
+        self.assertEqual(args.cores,240)
+        self.assertEqual(args.site_metadata['selection'],'default')
+        with self.assertRaises(FileNotFoundError):parse([],str(ROOT/'missing.json'))
+
+    def test_global_profile_command_entries_and_recorded_operations(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);exp=root/'experiment'
+            env={**os.environ,'DLB_SITE_CONFIG':str(PROFILE)}
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP976','globalconfig','Mekong',
+                '--output-dir',str(exp),env=env)
+            before=json.loads((exp/'config/colm/run_manifest.json').read_text())
+            self.assertEqual(before['site_config']['selection'],'environment')
+            self.assertEqual(before['resources']['scheduler'],'slurm')
+            audit=run(str(TOOLS/'dlb_04_preflight.py'),'--region','Mekong',env=env)
+            self.assertIn(str(PROFILE),audit.stdout)
+            flat=root/'flat'
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--out-dir',str(flat),
+                '--region','Mekong','--include-dam-init',env=env)
+            self.assertTrue((flat/'run_manifest.json').is_file())
+            jobs=root/'jobs'
+            run(str(TOOLS/'dlb_03_generate_jobs.py'),'--nml-dir',str(flat),'--out-dir',str(jobs),env=env)
+            self.assertIn('mpirun -np 144',(jobs/'submit_SPINUP.slurm').read_text())
+            # A bad global path must not affect operations on a recorded study.
+            bad_env={**os.environ,'DLB_SITE_CONFIG':str(root/'missing.json')}
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--experiment-dir='+str(exp),'--overwrite',env=bad_env)
+            after=json.loads((exp/'config/colm/run_manifest.json').read_text())
+            self.assertEqual(after['site_config'],before['site_config'])
+            self.assertEqual(after['resources'],before['resources'])
+            run(str(TOOLS/'dlb_04_preflight.py'),'--nml-dir='+str(exp/'config/colm'),
+                '--phase','inputs',env=bad_env)
+            run(str(TOOLS/'dlb_08_generate_openbench.py'),str(exp),'--overwrite',env=bad_env)
+            explicit=root/'explicit'
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP977','explicit','Mekong',
+                '--site-config',str(PROFILE),'--output-dir',str(explicit),env=bad_env)
+            # --help remains usable even when a global profile path is invalid.
+            result=run(str(TOOLS/'dlb_01_create_experiment.py'),'--help',env=bad_env)
+            self.assertIn('--no-site-config',result.stdout)
+            self.assertEqual(list((ROOT/'cases').iterdir()),[])
 
 
 if __name__=='__main__':unittest.main()

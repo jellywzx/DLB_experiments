@@ -1,0 +1,39 @@
+DLB 仓库迁移记录
+日期：2026-11-04（Asia/Shanghai）
+
+旧仓库：/home/weizx24/weizx24/DLB_experiments
+保存分支：local/weizx24-site-migration
+迁移来源提交：532c682（仅本次对话修改的 10 个文件）
+旧仓库的其他流域代码、掩膜数据及输出保持原状，没有加入迁移提交。
+
+新仓库：/home/weizx24/weizx24/DLB_experiments_new
+远端：git@github.com:jellywzx/DLB_experiments.git
+远端默认分支：main
+远端基础提交：7f1a362
+集成分支：integrate/weizx24-site
+
+冲突处理：
+- 保留远端将 OpenBench 拆分为 dlb_08_generate_openbench.py 的结构。
+- 保留 USA 36 份、其他区域 18 份 YAML，包括 spinup/CTL 独立评估、DLB 命名及 OpenBench_Streamflow_Daily 参考源。
+- 保留 CoLM/OpenBench 分别安全再生成、备份和已有运行产物保护。
+- 保留相对作业路径和可移动实验目录；接入 Slurm、mpirun、exclusive 和可选节点配置。
+- CoLM 再生成使用已记录的本机配置与模板，不依赖服务器 JSON 后续内容变化。
+- OpenBench 独立生成/再生成读取已记录的掩膜路径，支持 --mask-root 和 --site-config。
+
+本机路径：
+- experiments_root 指向新仓库。
+- mask_root 继续指向旧仓库 basin_mask/outputs，请保留旧数据目录。
+- CoLM、case、rawdata、runtime、SoilInit 和 forcing 路径保持原有本机设置。
+
+验证：
+- python3 -m unittest discover -s tests -v：15 项测试全部通过（无跳过）。
+- git diff --check：通过。
+- Python 源码语法检查：通过。
+- 真实服务器配置草稿冒烟检查：生成 18 份 OpenBench YAML、生成并再生成 Slurm 作业、脚本 bash -n、移动实验目录后 dry-run 均通过；未创建模型 case。
+- 本机输入目录、掩膜、可执行权限、routing/reservoir 变量及 960 个逐月 forcing 文件名检查通过。
+
+剩余问题：
+CoLM 源码缺少 DEF_UnitCatchment_regional、DEF_GridRiverLake_FloodFeedback，正式生成仍会失败；草稿可预览。
+MaterialTransport 宏和现有二进制编译配置仍需核实。细节见 weizx24_preflight.txt。
+
+未推送远端，未修改 CoLM 源码，未编译或提交模型作业。

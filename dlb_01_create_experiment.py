@@ -13,6 +13,9 @@ import tempfile
 from datetime import datetime,timezone
 from pathlib import Path
 
+from dlb_site_config import parse_site_args,basin_specs,input_issues
+from dlb_08_generate_openbench import BASINS,MASK_ROOT
+
 DEFAULT_ROOT=Path('/share/home/dq134/wzx/CoLM/DLB_nml')
 DEFAULT_REPO_ROOT=Path('/share/home/dq134/wzx/CoLM/CoLM202X_1030')
 DEFAULT_CASE_ROOT=Path('/share/home/dq134/wzx/CoLM/cases')
@@ -63,13 +66,20 @@ def main()->int:
     p.add_argument('--queue',default='normal');p.add_argument('--cores',type=int,default=240)
     p.add_argument('--tasks-per-node',type=int,default=48);p.add_argument('--memory',default='150G')
     p.add_argument('--walltime',default='24:00:00')
+    p.add_argument('--mask-root',type=Path,default=MASK_ROOT)
+    p.add_argument('--forcing-root',type=Path)
+    p.add_argument('--template',type=Path)
+    p.add_argument('--scheduler',choices=['lsf','slurm'],default='lsf')
+    p.add_argument('--launcher',choices=['mpirun','srun','yhrun'])
+    p.add_argument('--exclusive',action=argparse.BooleanOptionalAction,default=False)
+    p.add_argument('--node')
     location=p.add_mutually_exclusive_group()
     location.add_argument('--output-dir',type=Path,
         help='Exact final experiment directory (default: EXPERIMENTS_ROOT/EXPnnn_slug_REGION)')
     location.add_argument('--experiments-root',type=Path,default=DEFAULT_ROOT,
         help=f'Parent directory for generated experiments (default: {DEFAULT_ROOT})')
     p.add_argument('--draft',action='store_true',help=argparse.SUPPRESS)
-    args=p.parse_args()
+    args=parse_site_args(p)
     if not re.fullmatch(r'EXP\d{3,}',args.experiment_id):fail('experiment_id must match EXPnnn')
     if not re.fullmatch(r'[a-z0-9][a-z0-9._-]*',args.slug):fail('slug must be lowercase letters/digits/._-')
     if not 2000<=args.eval_start_year<=args.eval_end_year<=2005:fail('evaluation years must be within 2000–2005')
@@ -87,6 +97,12 @@ def main()->int:
     cases.extend(f'{case_prefix}_{suffix}_{resolution}' for suffix in ('ctl','D','L','B','DL','DB','LB','DLB'))
     collisions=[case_root/case for case in cases if (case_root/case).exists() or (case_root/case).is_symlink()]
     if collisions:fail('case already exists: '+', '.join(map(str,collisions)))
+    basins=basin_specs(BASINS,args.region,args.mask_root,MASK_ROOT)
+    issues=input_issues(args,[args.region],[basins]) if args.site_config else []
+    for mask in (x[3] for x in basins):
+        if mask and not mask.is_file() and not any(str(mask) in x for x in issues):
+            issues.append(f'missing verified basin mask: {mask}')
+    if issues and not args.draft:fail('Input validation failed:\n'+'\n'.join(issues))
     root.mkdir(parents=True,exist_ok=True)
     staging=Path(tempfile.mkdtemp(prefix=f'.{name}.',dir=str(root)))
     script_dir=Path(__file__).resolve().parent
@@ -100,25 +116,38 @@ def main()->int:
             '--rawdata',str(args.rawdata),'--runtime',str(args.runtime),'--soil-init',str(args.soil_init),
             '--log-dir',str(staging/'logs'),'--no-lsf','--include-dam-init',
             '--eval-start-year',str(args.eval_start_year),'--eval-end-year',str(args.eval_end_year)]
+        if args.site_config:generator.extend(['--site-config',str(args.site_config.absolute())])
+        if args.template:generator.extend(['--template',str(args.template)])
+        if args.forcing_root:generator.extend(['--forcing-root',str(args.forcing_root)])
         if args.draft:generator.append('--draft')
         run_checked(generator)
-        run_checked([sys.executable,str(script_dir/'dlb_03_generate_jobs.py'),
-            '--nml-dir',str(staging/'config/colm'),'--scheduler','lsf',
+        jobs=[sys.executable,str(script_dir/'dlb_03_generate_jobs.py'),
+            '--nml-dir',str(staging/'config/colm'),'--scheduler',args.scheduler,
             '--exe',str(repo/'run/colm.x'),'--out-dir',str(staging/'config/jobs'),
             '--log-dir',str(staging/'logs'),
             '--queue',args.queue,'--cores',str(args.cores),'--tasks-per-node',str(args.tasks_per_node),
-            '--memory',args.memory,'--walltime',args.walltime,'--mpi-root',str(args.mpi_root),
-            '--intel-env',str(args.intel_env),*(['--allow-draft'] if args.draft else [])])
+            '--memory',args.memory,'--walltime',args.walltime]
+        if args.site_config:jobs.extend(['--site-config',str(args.site_config.absolute())])
+        for option in ('mpi_root','intel_env','launcher','node'):
+            if getattr(args,option):jobs.extend(['--'+option.replace('_','-'),str(getattr(args,option))])
+        jobs.append('--exclusive' if args.exclusive else '--no-exclusive')
+        if args.draft:jobs.append('--allow-draft')
+        run_checked(jobs)
         manifest=json.loads((staging/'config/colm/run_manifest.json').read_text())
-        manifest['resources']={'scheduler':'lsf','queue':args.queue,'cores':args.cores,
+        manifest['resources']={'scheduler':args.scheduler,'queue':args.queue,'cores':args.cores,
             'tasks_per_node':args.tasks_per_node,'memory':args.memory,'walltime':args.walltime,
-            'mpi_root':str(args.mpi_root.resolve()),'intel_env':str(args.intel_env.resolve())}
+            'mpi_root':str(args.mpi_root.resolve()) if args.mpi_root else None,
+            'intel_env':str(args.intel_env.resolve()) if args.intel_env else None,
+            'launcher':args.launcher or ('mpirun' if args.scheduler=='lsf' else 'srun'),
+            'exclusive':args.exclusive,'node':args.node}
+        manifest['site_config']=args.site_metadata
+        manifest['validation_issues']=list(dict.fromkeys(manifest.get('validation_issues',[])+issues))
         (staging/'config/colm/run_manifest.json').write_text(
             json.dumps(manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
         render_static_templates(script_dir/'templates/dlb_region_experiment',staging,
             {'EXP_NAME':name,'EXP_DIR':str(target),'TOOLS_DIR':str(script_dir)})
         meta={'schema_version':2,'experiment_id':args.experiment_id,'name':name,'slug':args.slug,
-              'region':args.region,'status':'created',
+              'region':args.region,'status':'created','site_config':args.site_metadata,
               'created_at':datetime.now(timezone.utc).isoformat(),
               'hypothesis':None,'conclusion':None,
               'source':{'colm_repository':str(repo),'colm_commit':git_value(repo,'rev-parse','HEAD'),
@@ -131,8 +160,11 @@ def main()->int:
         run_checked([sys.executable,str(script_dir/'dlb_08_generate_openbench.py'),str(staging),
                      '--eval-start-year',str(args.eval_start_year),
                      '--eval-end-year',str(args.eval_end_year),
-                     '--output-root',str(target/'openbench_output'),'--no-refresh'])
+                     '--output-root',str(target/'openbench_output'),'--mask-root',str(args.mask_root),'--no-refresh'])
         expected=len(json.loads((staging/'manifest.yaml').read_text())['evaluation']['projects'])
+        (staging/'provenance/site_config.json').write_text(json.dumps(args.site_metadata,indent=2)+'\n')
+        (staging/'provenance/input_validation.txt').write_text(
+            '\n'.join(manifest['validation_issues'])+'\n' if manifest['validation_issues'] else 'Input/source checks passed. Binary compatibility remains unverified.\n')
         artifacts={'schema_version':1,'experiment':name,'artifacts':[]}
         (staging/'artifacts.yaml').write_text(json.dumps(artifacts,indent=2)+'\n',encoding='utf-8')
         # Files are assembled in a sibling temporary directory, but every runtime

@@ -41,6 +41,8 @@ from datetime import datetime,timezone
 from pathlib import Path
 from dlb_00_workflow_common import WorkflowError,preprocessor_state
 
+from dlb_site_config import parse_site_args,unsupported_fields,input_issues,KEYS
+
 BASE_TEMPLATE = Path('run/examples/Amazon_Grid_25km_IGBP_VG_RiverLake.nml')
 DEFINE_FILE = Path('include/define.h')
 RAWDATA = Path('/share/home/dq013/zhwei/colm/data/CoLMrawdata')
@@ -397,6 +399,15 @@ def regenerate_experiment(root:Path,overwrite:bool)->int:
         '--log-dir',str(final_log),'--no-lsf','--include-dam-init',
         '--eval-start-year',str(old['evaluation']['start_year']),
         '--eval-end-year',str(old['evaluation']['end_year'])]
+    # Regeneration uses the saved effective profile, never a mutable server JSON.
+    site=old.get('site_config',{})
+    snapshot=None
+    if site.get('path'):
+        snapshot=staging/'site_config.json'
+        snapshot.write_text(json.dumps({k:v for k,v in site['effective'].items()
+                                        if k in KEYS and (v is not None or k in {'mpi_root','intel_env','node'})})+'\n')
+        command.extend(['--site-config',str(snapshot)])
+    if old.get('base_template'):command.extend(['--template',old['base_template']])
     if old.get('draft'):command.append('--draft')
     try:
         run_command(command)
@@ -409,12 +420,22 @@ def regenerate_experiment(root:Path,overwrite:bool)->int:
             '--tasks-per-node',str(resources.get('tasks_per_node',48)),
             '--memory',resources.get('memory','150G'),
             '--walltime',resources.get('walltime','24:00:00')]
+        if snapshot:jobs.extend(['--site-config',str(snapshot)])
+        for key in ('launcher','node'):
+            if resources.get(key):jobs.extend(['--'+key,str(resources[key])])
+        jobs.append('--exclusive' if resources.get('exclusive',False) else '--no-exclusive')
         if resources.get('mpi_root'):jobs.extend(['--mpi-root',resources['mpi_root']])
         if resources.get('intel_env'):jobs.extend(['--intel-env',resources['intel_env']])
         if old.get('draft'):jobs.append('--allow-draft')
         run_command(jobs)
         new_manifest=json.loads((staged_colm/'run_manifest.json').read_text(encoding='utf-8'))
         new_manifest['resources']=resources
+        new_manifest['site_config']=site
+        if snapshot:
+            job_metadata=json.loads((staged_jobs/'site_config.json').read_text())
+            job_metadata.update(path=site['path'],sha256=site['sha256'])
+            (staged_jobs/'site_config.json').write_text(json.dumps(job_metadata,indent=2)+'\n')
+            snapshot.unlink()
         (staged_colm/'run_manifest.json').write_text(
             json.dumps(new_manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
         replacements=((str(staged_colm),str(colm_dir)),(str(staged_jobs),str(jobs_dir)),
@@ -478,6 +499,7 @@ def main() -> int:
                         help='LSF log directory (default: OUT_DIR/logs)')
     parser.add_argument('--no-lsf', action='store_true',
                         help='Generate configuration only; dlb_03_generate_jobs.py owns jobs')
+    parser.add_argument('--lsf',dest='no_lsf',action='store_false',help='Explicitly enable legacy LSF output')
     parser.add_argument('--include-dam-init', action='store_true',
                         help='Also generate the dedicated 2000 D_INIT namelist')
     parser.add_argument('--eval-start-year', type=int, default=2001)
@@ -496,9 +518,11 @@ def main() -> int:
                         help='Also fail if checked-in define.h macros disagree with study')
     parser.add_argument('--overwrite', action='store_true',
                         help='Overwrite only generated names, never delete unrelated files')
-    args = parser.parse_args()
+    parser.add_argument('--forcing-root',type=Path)
+    args = parse_site_args(parser,recorded_options=('--experiment-dir',))
 
     if args.experiment_dir:
+        if args.site_config:die('--experiment-dir uses its recorded server profile; omit --site-config')
         forbidden=(args.repo_root,args.out_dir,args.case_root,args.forcing_nml,args.study_id,args.study_slug)
         if any(x is not None for x in forbidden):
             die('--experiment-dir cannot be combined with flat-generation path/study options')
@@ -560,6 +584,7 @@ def main() -> int:
     if args.strict_build and actual_mismatches:
         die('Build macro checks failed; inspect include/define.h, then make clean and rebuild')
 
+    validation_issues = input_issues(args,selected_regions) if args.site_config else []
     original = template.read_text(encoding='utf-8')
     if not FORTRAN_GROUP.search(original):
         die('The model template is not a &nl_colm namelist')
@@ -781,6 +806,12 @@ def main() -> int:
             'history_resolution_degrees': history_res,
         }
 
+    if not info.get('checked'):
+        validation_issues.append(f'Forcing metadata unverified: {forcing}')
+    if args.site_config:
+        validation_issues.extend(unsupported_fields(repo,list(texts.values())))
+        if not args.draft and validation_issues:
+            die('Input/source compatibility failed:\n'+'\n'.join(validation_issues))
     from io import StringIO
     csv_buffer = StringIO()
     writer = csv.DictWriter(csv_buffer, fieldnames=list(rows[0]))
@@ -798,6 +829,8 @@ def main() -> int:
         'base_template_sha256': file_hash(template),
         'forcing': info,
         'draft': bool(args.draft),
+        'site_config': args.site_metadata,
+        'validation_issues': validation_issues,
         'regions': region_manifest,
         'common_spinup': '1996-01-01 to 1999-12-31',
         'experiment_interval': '2000-01-01 to 2005-12-31',
