@@ -35,6 +35,60 @@ class WorkflowError(Exception):
     pass
 
 
+def _macro_condition(expression:str,state:dict[str,bool],path:Path)->bool:
+    """Evaluate the defined(NAME), !, &&, || subset used by define.h."""
+    def replace_defined(match:re.Match[str])->str:
+        name=match.group(1) or match.group(2)
+        return str(bool(state.get(name,False)))
+
+    expression=re.sub(
+        r'\bdefined\s*(?:\(\s*(\w+)\s*\)|\s+(\w+))',replace_defined,expression)
+    expression=expression.replace('&&',' and ').replace('||',' or ')
+    expression=re.sub(r'!(?!=)',' not ',expression)
+    if re.sub(r'\b(?:True|False|and|or|not)\b|[()\s]','',expression):
+        raise WorkflowError(f'不支持的预处理条件 {path}: {expression.strip()}')
+    return bool(eval(expression,{'__builtins__':{}},{}))
+
+
+def preprocessor_state(path:Path)->dict[str,bool]:
+    """Return effective macro state after evaluating define.h conditionals."""
+    if not path.is_file():raise WorkflowError(f'源码宏文件不存在: {path}')
+    state:dict[str,bool]={}
+    # Each frame stores parent-active, whether a branch has matched, and active.
+    conditions:list[list[bool]]=[]
+    active=True
+    for line in path.read_text(encoding='utf-8').splitlines():
+        directive=re.match(r'^\s*#(if|ifdef|ifndef|elif|else|endif)\b\s*(.*)',line)
+        if directive:
+            kind,argument=directive.groups()
+            if kind in ('if','ifdef','ifndef'):
+                if kind=='if':matched=_macro_condition(argument,state,path)
+                else:
+                    matched=bool(state.get(argument.strip(),False))
+                    if kind=='ifndef':matched=not matched
+                conditions.append([active,matched,active and matched])
+                active=conditions[-1][2]
+            elif kind=='elif':
+                if not conditions:raise WorkflowError(f'{path}: 意外的 #elif')
+                parent,taken,_=conditions[-1]
+                matched=not taken and _macro_condition(argument,state,path)
+                conditions[-1]=[parent,taken or matched,parent and matched]
+                active=conditions[-1][2]
+            elif kind=='else':
+                if not conditions:raise WorkflowError(f'{path}: 意外的 #else')
+                parent,taken,_=conditions[-1]
+                conditions[-1]=[parent,True,parent and not taken]
+                active=conditions[-1][2]
+            else:
+                if not conditions:raise WorkflowError(f'{path}: 意外的 #endif')
+                parent,_,_=conditions.pop();active=parent
+            continue
+        match=re.match(r'^\s*#(define|undef)\s+(\w+)\b',line)
+        if active and match:state[match.group(2)]=match.group(1)=='define'
+    if conditions:raise WorkflowError(f'{path}: 预处理条件未闭合')
+    return state
+
+
 def clean_value(v: str) -> str:
     """Remove a trailing ! comment outside a Fortran quoted value."""
     quoted = None

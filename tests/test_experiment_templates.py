@@ -85,6 +85,63 @@ def tree_hash(root:Path)->str:
     return digest.hexdigest()
 
 
+class PreprocessorMacroTests(unittest.TestCase):
+    def test_inactive_undef_does_not_override_active_definition(self):
+        from dlb_00_workflow_common import preprocessor_state
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'define.h'
+            path.write_text('''#define LULC_IGBP_PFT
+#undef LULC_IGBP_PC
+#define USEMPI
+#if (defined URBAN_MODEL && defined SinglePoint)
+#undef LULC_IGBP_PFT
+#endif
+#if (defined SinglePoint)
+#undef USEMPI
+#endif
+''')
+            state=preprocessor_state(path)
+            self.assertTrue(state['LULC_IGBP_PFT'])
+            self.assertFalse(state['LULC_IGBP_PC'])
+            self.assertTrue(state['USEMPI'])
+
+    def test_nested_elif_and_active_undef(self):
+        from dlb_00_workflow_common import preprocessor_state
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'define.h'
+            path.write_text('''#define BASE
+#if defined(BASE)
+#if defined(MISSING)
+#define WRONG_BRANCH
+#elif !defined(OTHER)
+#undef BASE
+#define SELECTED_BRANCH
+#else
+#define WRONG_ELSE
+#endif
+#endif
+#ifndef SELECTED_BRANCH
+#define WRONG_IFNDEF
+#endif
+''')
+            state=preprocessor_state(path)
+            self.assertFalse(state['BASE'])
+            self.assertTrue(state['SELECTED_BRANCH'])
+            self.assertNotIn('WRONG_BRANCH',state)
+            self.assertNotIn('WRONG_ELSE',state)
+            self.assertNotIn('WRONG_IFNDEF',state)
+
+    def test_invalid_preprocessor_conditions_fail_clearly(self):
+        from dlb_00_workflow_common import WorkflowError,preprocessor_state
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'define.h'
+            for text in ('#if FEATURE == 1\n#endif\n','#if defined(FEATURE)\n'):
+                with self.subTest(text=text):
+                    path.write_text(text)
+                    with self.assertRaises(WorkflowError):preprocessor_state(path)
+
+
+@unittest.skipUnless(REPO.is_dir(),'local CoLM checkout unavailable')
 class ExperimentTemplateTests(unittest.TestCase):
     def test_all_regions_and_job_stages(self):
         with tempfile.TemporaryDirectory() as td:
@@ -127,11 +184,20 @@ class ExperimentTemplateTests(unittest.TestCase):
                 self.assertIn('STEPS mksrfdata mkinidata colm',spin)
                 self.assertIn('STEPS mkinidata',dam)
                 self.assertNotIn('mksrfdata.x',dam)
+                self.assertIn(f'#BSUB -o {exp}/logs/D_INIT.%J.out',dam)
+                self.assertIn(f'#BSUB -e {exp}/logs/D_INIT.%J.err',dam)
+                self.assertIn('#BSUB -env "all,LSB_STDOUT_DIRECT=Y"',dam)
+                self.assertNotIn('#BSUB -o ../../logs',dam)
+                resolution='0p5' if region=='Global' else '0p1'
+                self.assertIn(f'NML={exp}/config/colm/{exp.name}_D_INIT_{resolution}.nml',dam)
+                self.assertIn(f'MARKER={exp}/config/jobs/markers/D_INIT.success',dam)
+                self.assertNotIn('BASH_SOURCE',dam)
                 self.assertIn('STEPS colm',formal)
                 self.assertNotIn('mkinidata.x',formal)
                 helper=(exp/'config/jobs/submit_batch.sh').read_text()
                 self.assertIn('JOB_DIR="$SCRIPT_DIR"',helper)
                 self.assertNotIn(f'JOB_DIR={exp}',helper)
+                self.assertIn('ORDER=(E0_CTL E2_L E1_D E4_DL E3_B E5_DB E6_LB E7_ALL)',helper)
                 moved=root/f'moved_{region}'
                 exp.rename(moved)
                 preview=subprocess.run(
@@ -207,6 +273,17 @@ class ExperimentTemplateTests(unittest.TestCase):
             self.assertTrue((target/'config/jobs/submit_batch.sh').is_file())
             self.assertTrue(any((path/'colm').is_dir() and (path/'jobs').is_dir()
                                 for path in backups.iterdir()))
+            regenerated=json.loads((target/'config/colm/run_manifest.json').read_text())
+            spin_case=regenerated['runs']['spinup']['Mekong']['case']
+            nested_restart=cases/spin_case/'restart/2000-001-00000'/f'{spin_case}_restart_test.nc'
+            nested_restart.parent.mkdir(parents=True);nested_restart.write_bytes(b'restart')
+            blocked=run(str(TOOLS/'dlb_02_generate_namelists.py'),
+                '--experiment-dir',str(target),'--overwrite',ok=False)
+            self.assertNotEqual(blocked.returncode,0)
+            self.assertIn('run products exist',blocked.stderr)
+            self.assertIn(str(nested_restart),blocked.stderr)
+            nested_restart.unlink();nested_restart.parent.rmdir()
+            nested_restart.parent.parent.rmdir();nested_restart.parent.parent.parent.rmdir()
             marker=target/'config/jobs/markers/SPINUP.success'
             marker.parent.mkdir();marker.touch()
             blocked=run(str(TOOLS/'dlb_02_generate_namelists.py'),
@@ -229,6 +306,8 @@ class ExperimentTemplateTests(unittest.TestCase):
             spin=manifest['spinup']['USA']['case'];dam=manifest['dam_init']['USA']['case']
             experiments=manifest['experiments']['USA']
             (cases/spin/'landdata').mkdir(parents=True)
+            river_source=cases/spin/'riverlake/unitcatchment_regional.nc'
+            river_source.parent.mkdir();river_source.write_bytes(b'regional-routing')
             stamp='2000-001-00000'
             spin_time=cases/spin/'restart'/stamp;spin_const=cases/spin/'restart/const'
             dam_time=cases/dam/'restart'/stamp
@@ -264,6 +343,9 @@ class ExperimentTemplateTests(unittest.TestCase):
                 actual=hashlib.sha256(target.read_bytes()).hexdigest()
                 self.assertEqual(actual,dam_hash if item['switches']['reservoir_method'] else spin_hash)
                 self.assertTrue((cases/case/'landdata').is_symlink())
+                regional=cases/case/'riverlake/unitcatchment_regional.nc'
+                self.assertTrue(regional.is_symlink())
+                self.assertEqual(regional.resolve(),river_source.resolve())
                 self.assertTrue((cases/case/'.aas_restart_handoff.json').is_file())
 
 

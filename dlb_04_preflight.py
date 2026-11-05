@@ -7,13 +7,13 @@ GridRiverLake transaction/feature metadata, executable, and optional monthly for
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 from dlb_site_config import parse_site_args,audit_site,unsupported_fields,PATH_KEYS,forcing_month_issues
 from dlb_00_workflow_common import (WorkflowError,load_study,select,assignments,string,number,
  path_value,stamp,timefiles,constfiles,validate_restart_filenames,gridriver_file,
- gridriver_integrity,probe_netcdf,ROUTING_FIELDS,LEVEE_FIELDS,BIF_FIELDS,DAM_FIELDS,error_exit)
+ gridriver_integrity,probe_netcdf,preprocessor_state,ROUTING_FIELDS,LEVEE_FIELDS,BIF_FIELDS,
+ DAM_FIELDS,error_exit)
 
 
 def main()->int:
@@ -105,6 +105,22 @@ def main()->int:
             if args.strict_macros and (': define.h=' in note or note.startswith('Cannot inspect')):
                 errors.append(note)
             else:warnings.append(note)
+    if args.repo_root:
+        macros=args.repo_root.resolve()/'include/define.h'
+        if not macros.is_file():
+            errors.append(f'源码宏文件不存在: {macros}')
+        else:
+            state=preprocessor_state(macros)
+            for key,expect in {'GRIDBASED':True,'GridRiverLakeFlow':True,'USEMPI':True,
+                               'CaMa_Flood':False,'BGC':False,'CROP':False,
+                               'MaterialTransport':False}.items():
+                add(state.get(key)==expect,f'include/define.h {key} = {expect}',
+                    'error' if args.strict_macros else 'warn')
+            if not (state.get('LULC_IGBP_PFT') or state.get('LULC_IGBP_PC')):
+                errors.append('既未定义 LULC_IGBP_PFT，也未定义 LULC_IGBP_PC')
+            if not state.get('LULC_IGBP_PFT'):
+                warnings.append('项目提纲计划使用 LULC_IGBP_PFT，当前源码可能是 LULC_IGBP_PC；需与初始场一致并完整重编')
+            warnings.append('define.h 检查只能验证源码宏，不能证明现有 colm.x 的编译配置')
 
     if args.check_netcdf:
         route=path_value(ref,'DEF_UnitCatchment_file')
@@ -152,8 +168,13 @@ def main()->int:
         except WorkflowError as exc:errors.append(f'D_INIT gridriver 读取失败: {exc}')
 
     if args.phase in ('experiments','all'):
+        river_source=study.spinup.case_dir/'riverlake/unitcatchment_regional.nc'
         for run in selected:
             add((run.case_dir/'landdata').is_dir(),f'{run.label} landdata 已就绪')
+            regional=run.case_dir/'riverlake/unitcatchment_regional.nc'
+            add(regional.is_symlink() and regional.is_file() and
+                regional.resolve()==river_source.resolve(),
+                f'{run.label} regional routing 链接已就绪: {regional}')
             fs=timefiles(run,2000);cs=constfiles(run)
             misses=validate_restart_filenames(fs,run,2000)+validate_restart_filenames(cs,run,None)
             if misses:
