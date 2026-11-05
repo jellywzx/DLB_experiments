@@ -161,6 +161,17 @@ class ExperimentTemplateTests(unittest.TestCase):
             self.assertTrue((target/'config/jobs/submit_batch.sh').is_file())
             self.assertTrue(any((path/'colm').is_dir() and (path/'jobs').is_dir()
                                 for path in backups.iterdir()))
+            regenerated=json.loads((target/'config/colm/run_manifest.json').read_text())
+            spin_case=regenerated['runs']['spinup']['Mekong']['case']
+            nested_restart=cases/spin_case/'restart/2000-001-00000'/f'{spin_case}_restart_test.nc'
+            nested_restart.parent.mkdir(parents=True);nested_restart.write_bytes(b'restart')
+            blocked=run(str(TOOLS/'dlb_02_generate_namelists.py'),
+                '--experiment-dir',str(target),'--overwrite',ok=False)
+            self.assertNotEqual(blocked.returncode,0)
+            self.assertIn('run products exist',blocked.stderr)
+            self.assertIn(str(nested_restart),blocked.stderr)
+            nested_restart.unlink();nested_restart.parent.rmdir()
+            nested_restart.parent.parent.rmdir();nested_restart.parent.parent.parent.rmdir()
             marker=target/'config/jobs/markers/SPINUP.success'
             marker.parent.mkdir();marker.touch()
             blocked=run(str(TOOLS/'dlb_02_generate_namelists.py'),

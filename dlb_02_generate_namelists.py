@@ -433,7 +433,8 @@ def regenerate_experiment(root:Path,overwrite:bool)->int:
         case=case_root/run['case']
         for dirname in ('history','restart','restarts'):
             path=case/dirname
-            if path.is_dir():products.extend(x for x in path.iterdir() if x.is_file())
+            if path.is_dir():
+                products.extend(x for x in path.rglob('*') if x.is_file() or x.is_symlink())
     if markers or products:
         sample=[*(str(x) for x in markers[:3]),*(str(x) for x in products[:3])]
         die('Refusing to overwrite CoLM configuration after run products exist: '+', '.join(sample))
