@@ -194,6 +194,8 @@ class ExperimentTemplateTests(unittest.TestCase):
             spin=manifest['spinup']['USA']['case'];dam=manifest['dam_init']['USA']['case']
             experiments=manifest['experiments']['USA']
             (cases/spin/'landdata').mkdir(parents=True)
+            river_source=cases/spin/'riverlake/unitcatchment_regional.nc'
+            river_source.parent.mkdir();river_source.write_bytes(b'regional-routing')
             stamp='2000-001-00000'
             spin_time=cases/spin/'restart'/stamp;spin_const=cases/spin/'restart/const'
             dam_time=cases/dam/'restart'/stamp
@@ -229,6 +231,9 @@ class ExperimentTemplateTests(unittest.TestCase):
                 actual=hashlib.sha256(target.read_bytes()).hexdigest()
                 self.assertEqual(actual,dam_hash if item['switches']['reservoir_method'] else spin_hash)
                 self.assertTrue((cases/case/'landdata').is_symlink())
+                regional=cases/case/'riverlake/unitcatchment_regional.nc'
+                self.assertTrue(regional.is_symlink())
+                self.assertEqual(regional.resolve(),river_source.resolve())
                 self.assertTrue((cases/case/'.aas_restart_handoff.json').is_file())
 
 

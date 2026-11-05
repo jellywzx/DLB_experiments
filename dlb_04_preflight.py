@@ -150,8 +150,13 @@ def main()->int:
         except WorkflowError as exc:errors.append(f'D_INIT gridriver 读取失败: {exc}')
 
     if args.phase in ('experiments','all'):
+        river_source=study.spinup.case_dir/'riverlake/unitcatchment_regional.nc'
         for run in selected:
             add((run.case_dir/'landdata').is_dir(),f'{run.label} landdata 已就绪')
+            regional=run.case_dir/'riverlake/unitcatchment_regional.nc'
+            add(regional.is_symlink() and regional.is_file() and
+                regional.resolve()==river_source.resolve(),
+                f'{run.label} regional routing 链接已就绪: {regional}')
             fs=timefiles(run,2000);cs=constfiles(run)
             misses=validate_restart_filenames(fs,run,2000)+validate_restart_filenames(cs,run,None)
             if misses:
