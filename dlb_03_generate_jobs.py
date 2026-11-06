@@ -36,29 +36,27 @@ def script_body(label:str,case:str,nml:Path,run_dir:Path,steps:list[str],job_dir
                 log_dir:Path,scheduler:str,queue:str,cores:int,tpn:int,mem:str,walltime:str,
                 launcher:str,workdir:Path,mpi_root:Path|None,intel_env:Path|None,exclusive:bool=False,node:str|None=None)->str:
     name=case[:100]
+    log_label='DLB' if label=='E7_ALL' else label
     lines=['#!/usr/bin/env bash']
     if scheduler=='lsf':
         lines.extend([f'#BSUB -J {name}',f'#BSUB -q {queue}',f'#BSUB -n {cores}',
                       f'#BSUB -W {walltime}',f'#BSUB -R "span[ptile={tpn}]"',
                       f'#BSUB -R "rusage[mem={mem}]"',
-                      f'#BSUB -o {log_dir}/{label}.%J.out',
-                      f'#BSUB -e {log_dir}/{label}.%J.err',
+                      f'#BSUB -o {log_dir}/{log_label}.%J.out',
+                      f'#BSUB -e {log_dir}/{log_label}.%J.err',
                       '#BSUB -env "all,LSB_STDOUT_DIRECT=Y"'])
     else:
         nodes=math.ceil(cores/tpn)
         lines.extend([f'#SBATCH --job-name={name}',f'#SBATCH --partition={queue}',
                       f'#SBATCH --nodes={nodes}',f'#SBATCH --ntasks={cores}',
                       f'#SBATCH --ntasks-per-node={tpn}',f'#SBATCH --time={walltime}',
-                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_rel}/{label}.%j.out',
-                      f'#SBATCH --error={log_rel}/{label}.%j.err'])
+                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_dir}/{log_label}.%j.out',
+                      f'#SBATCH --error={log_dir}/{log_label}.%j.err'])
     if scheduler=='slurm':
         if exclusive:lines.append('#SBATCH --exclusive')
         if node:lines.append(f'#SBATCH --nodelist={node}')
     lines.extend(['','set -euo pipefail',
                   'SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"'])
-                      f'#SBATCH --mem={mem}',f'#SBATCH --output={log_dir}/{label}.%j.out',
-                      f'#SBATCH --error={log_dir}/{label}.%j.err'])
-    lines.extend(['','set -euo pipefail'])
     if intel_env:
         lines.append(f'source {sq(intel_env)}')
     lines.extend(['export OMP_NUM_THREADS=1','export HDF5_USE_FILE_LOCKING=FALSE','ulimit -s unlimited',
@@ -164,19 +162,22 @@ def main()->int:
     p.add_argument('--cores',type=int,default=480)
     p.add_argument('--tasks-per-node',type=int,default=48)
     p.add_argument('--memory',default='150G',help='Site-specific memory request (default example: 150G)')
-    p.add_argument('--walltime',default='24:00:00')
+    p.add_argument('--walltime',default='168:00:00')
     p.add_argument('--launcher',choices=['mpirun','srun','yhrun'])
     p.add_argument('--mpi-root',type=Path,help='Optional MPI root; uses bin/mpirun')
     p.add_argument('--intel-env',type=Path,help='Optional environment script sourced by each job')
     p.add_argument('--workdir',type=Path,help='Working directory, defaults to executable parent')
     p.add_argument('--overwrite',action='store_true')
+    p.add_argument('--allow-nonstandard-schedule',action='store_true',
+                   help='Generate jobs for intentional temporary start/end dates')
     p.add_argument('--allow-draft',action='store_true',help=argparse.SUPPRESS)
     p.add_argument('--exclusive',action=argparse.BooleanOptionalAction,default=False)
     p.add_argument('--node',help='Optional fixed Slurm node')
     args=parse_site_args(p)
     if args.exe is None and args.repo_root: args.exe=args.repo_root/'run/colm.x'
     if args.exe is None: p.error('--exe or a profile repo_root is required')
-    study=load_study(args.nml_dir,allow_draft=args.allow_draft)
+    study=load_study(args.nml_dir,allow_draft=args.allow_draft,
+                     validate_schedule=not args.allow_nonstandard_schedule)
     exe=args.exe.expanduser().resolve()
     workdir=(args.workdir or exe.parent).expanduser().resolve()
     output=(args.out_dir or (study.nml_dir/f'jobs_{args.scheduler}')).expanduser().resolve()

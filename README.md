@@ -216,7 +216,7 @@ LSF queue       normal
 MPI ranks       240
 每节点任务数    48
 内存            150G
-walltime        24:00:00
+walltime        168:00:00
 ```
 
 查看任一工具的完整参数：
@@ -307,7 +307,7 @@ python "$DLB_ROOT/dlb_01_create_experiment.py" EXP003 sensitivity USA \
   --cores 240 \
   --tasks-per-node 48 \
   --memory 150G \
-  --walltime 24:00:00 \
+  --walltime 168:00:00 \
   --eval-start-year 2001 \
   --eval-end-year 2005 \
   --output-dir /path/to/EXP003_sensitivity_USA
@@ -416,7 +416,7 @@ python "$DLB_ROOT/dlb_03_generate_jobs.py" \
   --cores 240 \
   --tasks-per-node 48 \
   --memory 150G \
-  --walltime 24:00:00 \
+  --walltime 168:00:00 \
   --launcher mpirun \
   --mpi-root /share/home/dq089/soft/mpich-4.2.3-intel \
   --intel-env /share/home/dq089/soft/intel-env
@@ -437,7 +437,7 @@ python "$DLB_ROOT/dlb_03_generate_jobs.py" \
   --cores 240 \
   --tasks-per-node 48 \
   --memory 150G \
-  --walltime 24:00:00 \
+  --walltime 168:00:00 \
   --launcher srun
 ```
 
@@ -446,6 +446,15 @@ python "$DLB_ROOT/dlb_03_generate_jobs.py" \
 ```bash
 --overwrite
 ```
+
+如果为断点续跑等临时需求有意修改了 namelist 的起止时间，重新生成作业时追加：
+
+```bash
+--allow-nonstandard-schedule
+```
+
+该选项只跳过标准年份范围校验，不跳过 case 名称、过程开关、输出路径等结构检查。
+后续使用 `dlb_06_stage_status.py` 或 `dlb_07_refresh_experiment.py` 检查该临时配置时，也需追加同名选项。
 
 生成内容包括 SPINUP、D_INIT、E0–E7 共 10 个作业和 `submit_batch.sh`。阶段命令为：
 

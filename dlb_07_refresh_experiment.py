@@ -24,6 +24,8 @@ def main()->int:
     p.add_argument('--jobs-dir',type=Path)
     p.add_argument('--openbench-result',action='append',default=[],metavar='PROJECT=STATUS',
                    help='STATUS is success, failed, or missing; repeatable')
+    p.add_argument('--allow-nonstandard-schedule',action='store_true',
+                   help='Refresh an experiment with intentional temporary start/end dates')
     p.add_argument('--mark-validated',action='store_true',
                    help='Set validated only when every automatic check already passes')
     args=p.parse_args()
@@ -49,6 +51,7 @@ def main()->int:
                 '--nml-dir',str(root/'config/colm'),'--json']
     colm_manifest=json.loads((root/'config/colm/run_manifest.json').read_text(encoding='utf-8'))
     if colm_manifest.get('draft'):status_cmd.append('--allow-draft')
+    if args.allow_nonstandard_schedule:status_cmd.append('--allow-nonstandard-schedule')
     if args.jobs_dir:status_cmd.extend(['--jobs-dir',str(args.jobs_dir.resolve())])
     result=subprocess.run(status_cmd,text=True,capture_output=True,check=False)
     if result.returncode:raise ValueError(f'stage status failed: {result.stderr or result.stdout}')

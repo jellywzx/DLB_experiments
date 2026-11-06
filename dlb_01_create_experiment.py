@@ -65,7 +65,7 @@ def main()->int:
     p.add_argument('--intel-env',type=Path,default=DEFAULT_INTEL)
     p.add_argument('--queue',default='normal');p.add_argument('--cores',type=int,default=240)
     p.add_argument('--tasks-per-node',type=int,default=48);p.add_argument('--memory',default='150G')
-    p.add_argument('--walltime',default='24:00:00')
+    p.add_argument('--walltime',default='168:00:00')
     p.add_argument('--mask-root',type=Path,default=MASK_ROOT)
     p.add_argument('--forcing-root',type=Path)
     p.add_argument('--template',type=Path)

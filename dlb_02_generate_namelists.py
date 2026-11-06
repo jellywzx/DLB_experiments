@@ -419,7 +419,7 @@ def regenerate_experiment(root:Path,overwrite:bool)->int:
             '--cores',str(resources.get('cores',240)),
             '--tasks-per-node',str(resources.get('tasks_per_node',48)),
             '--memory',resources.get('memory','150G'),
-            '--walltime',resources.get('walltime','24:00:00')]
+            '--walltime',resources.get('walltime','168:00:00')]
         if snapshot:jobs.extend(['--site-config',str(snapshot)])
         for key in ('launcher','node'):
             if resources.get(key):jobs.extend(['--'+key,str(resources[key])])
