@@ -331,6 +331,21 @@ class ExperimentTemplateTests(unittest.TestCase):
             spin_grid=spin_time/f'{spin}_restart_gridriver_{stamp}_lc.nc'
             dam_grid=dam_time/f'{dam}_restart_gridriver_{stamp}_lc.nc'
             grid(spin_grid,False,10);grid(dam_grid,True,20)
+            dam_nml=configs/manifest['dam_init']['USA']['nml_file']
+            original_dam_nml=dam_nml.read_text()
+            dam_nml.write_text(original_dam_nml.replace(
+                'DEF_simulation_time%start_year = 2000',
+                'DEF_simulation_time%start_year = 1999'))
+            selected=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),
+                '--allow-draft','--only','E0_CTL,E2_L,E3_B')
+            self.assertIn('DRY RUN',selected.stdout)
+            strict=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),
+                '--allow-draft','--only','E0_CTL,E2_L,E3_B','--validate-scope','all',ok=False)
+            self.assertIn('D_INIT 年份应为 2000–2000',strict.stderr)
+            dependent=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),
+                '--allow-draft','--only','E1_D',ok=False)
+            self.assertIn('D_INIT 年份应为 2000–2000',dependent.stderr)
+            dam_nml.write_text(original_dam_nml)
             dry=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),'--allow-draft')
             self.assertIn('DRY RUN',dry.stdout)
             self.assertFalse(any((cases/x['case']).exists() for x in experiments))

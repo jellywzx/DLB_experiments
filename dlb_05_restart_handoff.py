@@ -17,7 +17,7 @@ from pathlib import Path
 
 from dlb_00_workflow_common import (WorkflowError, constfiles, error_exit,
     gridriver_file, gridriver_integrity, load_study, select, stamp, timefiles,
-    validate_restart_filenames)
+    validate_restart_filenames, validate_study_schedule)
 
 
 def renamed(path:Path,source_case:str,target_case:str)->str:
@@ -64,15 +64,18 @@ def main()->int:
     p.add_argument('action',nargs='?',choices=['prepare-dam-init','handoff'],default='handoff')
     p.add_argument('--nml-dir',required=True,type=Path)
     p.add_argument('--only',default='all',help='handoff: all or E0_CTL,E2_L,...')
+    p.add_argument('--validate-scope',choices=['selected','all'],default='selected',
+                   help='handoff schedule validation scope (default: selected)')
     p.add_argument('--apply',action='store_true')
     p.add_argument('--hash',action='store_true')
     p.add_argument('--allow-draft',action='store_true',help=argparse.SUPPRESS)
     args=p.parse_args()
-    study=load_study(args.nml_dir,allow_draft=args.allow_draft)
+    study=load_study(args.nml_dir,allow_draft=args.allow_draft,validate_schedule=False)
     land_source=study.spinup.case_dir/'landdata'
     if not land_source.is_dir():raise WorkflowError(f'SPINUP landdata 不存在: {land_source}')
 
     if args.action=='prepare-dam-init':
+        validate_study_schedule(study)
         if not study.dam_init:raise WorkflowError('manifest 未定义 D_INIT')
         run=study.dam_init
         land=run.case_dir/'landdata'
@@ -87,6 +90,7 @@ def main()->int:
         return 0
 
     targets=select(study,args.only)
+    validate_study_schedule(study,None if args.validate_scope=='all' else targets)
     spin=study.spinup
     river_source=spin.case_dir/'riverlake/unitcatchment_regional.nc'
     if not river_source.is_file():

@@ -595,6 +595,24 @@ python "$DLB_ROOT/dlb_05_restart_handoff.py" \
   --only E0_CTL,E1_D,E7_ALL
 ```
 
+`handoff` 默认使用 `--validate-scope selected`，只校验 `--only` 选中实验及其必需依赖。
+所有实验都会校验 SPINUP；只有选中启用水库的 `E1_D`、`E4_DL`、`E5_DB` 或
+`E7_ALL` 时才会校验 D_INIT 年份和 restart。因此，仅处理 `E0_CTL`、`E2_L`、
+`E3_B` 或 `E6_LB` 时，未选中的 D_INIT 临时配置不会阻断交接。
+
+如需在交接前对 SPINUP、D_INIT 和全部 E0–E7 运行时间配置执行完整严格校验，显式使用：
+
+```bash
+python "$DLB_ROOT/dlb_05_restart_handoff.py" \
+  handoff \
+  --nml-dir "$EXP_DIR/config/colm" \
+  --only E0_CTL,E2_L,E3_B \
+  --validate-scope all
+```
+
+`prepare-dam-init` 始终使用完整校验，`--validate-scope` 仅影响 `handoff`。该选项不会跳过
+restart 完整性、GridRiver 特征或目标覆盖保护检查。
+
 非 D 组的全部 restart 来自 SPINUP；D 组的非 gridriver restart 来自 SPINUP，完整 gridriver restart 来自 D_INIT。工具拒绝覆盖已有 restart、history 或交接记录。
 
 ## 10. 提交正式实验

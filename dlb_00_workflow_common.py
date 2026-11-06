@@ -188,7 +188,7 @@ class Study:
     def case_root(self)->Path:return self.spinup.case_root
 
 
-def load_study(nml_dir:Path, allow_draft:bool=False)->Study:
+def load_study(nml_dir:Path, allow_draft:bool=False, validate_schedule:bool=True)->Study:
     nml_dir=nml_dir.expanduser().resolve()
     try:
         manifest=json.loads((nml_dir/'run_manifest.json').read_text(encoding='utf-8'))
@@ -253,22 +253,31 @@ def load_study(nml_dir:Path, allow_draft:bool=False)->Study:
         raise WorkflowError('各组 DEF_dir_output 不一致')
     if len({x.case for x in all_runs})!=len(all_runs):
         raise WorkflowError('不同实验的 DEF_CASE_NAME 重复')
-    if (number(spin.conf,'DEF_simulation_time%start_year'),number(spin.conf,'DEF_simulation_time%end_year'))!=(1996,1999):
-        raise WorkflowError('共享 Spinup 年份应为 1996–1999')
-    for x in exp:
-        if (number(x.conf,'DEF_simulation_time%start_year'),number(x.conf,'DEF_simulation_time%end_year'))!=(2000,2005):
-            raise WorkflowError(f'{x.label} 运行年限应为 2000–2005')
-        if boolean(x.conf,'DEF_GridRiverLake_FloodFeedback'):
-            raise WorkflowError(f'{x.label} 开启了洪泛—陆面反馈，违反研究的单向耦合设计')
-    if dam_init and (number(dam_init.conf,'DEF_simulation_time%start_year'),
-                     number(dam_init.conf,'DEF_simulation_time%end_year'))!=(2000,2000):
-        raise WorkflowError('D_INIT 年份应为 2000–2000')
     evaluation=manifest.get('evaluation',{})
     eval_start=int(evaluation.get('start_year',2001))
     eval_end=int(evaluation.get('end_year',2005))
     if not 2000<=eval_start<=eval_end<=2005:
         raise WorkflowError('manifest evaluation 年份不在 2000–2005 内')
-    return Study(nml_dir,manifest,spin,dam_init,exp,eval_start,eval_end)
+    study=Study(nml_dir,manifest,spin,dam_init,exp,eval_start,eval_end)
+    if validate_schedule:validate_study_schedule(study)
+    return study
+
+
+def validate_study_schedule(study:Study,targets:tuple[Run,...]|None=None)->None:
+    if (number(study.spinup.conf,'DEF_simulation_time%start_year'),
+        number(study.spinup.conf,'DEF_simulation_time%end_year'))!=(1996,1999):
+        raise WorkflowError('共享 Spinup 年份应为 1996–1999')
+    selected=study.experiments if targets is None else targets
+    for run in selected:
+        if (number(run.conf,'DEF_simulation_time%start_year'),
+            number(run.conf,'DEF_simulation_time%end_year'))!=(2000,2005):
+            raise WorkflowError(f'{run.label} 运行年限应为 2000–2005')
+        if boolean(run.conf,'DEF_GridRiverLake_FloodFeedback'):
+            raise WorkflowError(f'{run.label} 开启了洪泛—陆面反馈，违反研究的单向耦合设计')
+    if (study.dam_init and any(run.dam for run in selected) and
+        (number(study.dam_init.conf,'DEF_simulation_time%start_year'),
+         number(study.dam_init.conf,'DEF_simulation_time%end_year'))!=(2000,2000)):
+        raise WorkflowError('D_INIT 年份应为 2000–2000')
 
 
 def select(study:Study,only:str)->tuple[Run,...]:
