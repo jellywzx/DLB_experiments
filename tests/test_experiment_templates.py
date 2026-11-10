@@ -141,6 +141,41 @@ class PreprocessorMacroTests(unittest.TestCase):
                     with self.assertRaises(WorkflowError):preprocessor_state(path)
 
 
+class DamInitScheduleTests(unittest.TestCase):
+    def test_multiyear_schedule_validation(self):
+        from dlb_00_workflow_common import WorkflowError,load_study
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);configs=root/'configs'
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--repo-root',str(REPO),
+                '--out-dir',str(configs),'--case-root',str(root/'cases'),'--forcing-nml','JRA3Q',
+                '--region','USA','--study-id','EXP949','--study-slug','schedule',
+                '--include-dam-init','--no-lsf','--draft')
+            manifest=json.loads((configs/'run_manifest.json').read_text())['runs']
+            dam_nml=configs/manifest['dam_init']['USA']['nml_file']
+            original=dam_nml.read_text()
+
+            def set_period(start:int,end:int)->None:
+                dam_nml.write_text(original.replace(
+                    'DEF_simulation_time%start_year = 2000',
+                    f'DEF_simulation_time%start_year = {start}').replace(
+                    'DEF_simulation_time%end_year = 2000',
+                    f'DEF_simulation_time%end_year = {end}'))
+
+            for start in (1996,1998,2000):
+                with self.subTest(start=start,end=2000):
+                    set_period(start,2000)
+                    study=load_study(configs,allow_draft=True)
+                    self.assertEqual(
+                        int(study.dam_init.conf['def_simulation_time%start_year']),start)
+            for start,end in ((1995,2000),(1996,1999),(1996,2001),(2000,1999)):
+                with self.subTest(start=start,end=end):
+                    set_period(start,end)
+                    with self.assertRaisesRegex(
+                            WorkflowError,
+                            f'D_INIT 年份应满足起始年 1996–2000 且结束年为 2000，实际为 {start}–{end}'):
+                        load_study(configs,allow_draft=True)
+
+
 @unittest.skipUnless(REPO.is_dir(),'local CoLM checkout unavailable')
 class ExperimentTemplateTests(unittest.TestCase):
     def test_all_regions_and_job_stages(self):
@@ -339,17 +374,16 @@ class ExperimentTemplateTests(unittest.TestCase):
             original_dam_nml=dam_nml.read_text()
             dam_nml.write_text(original_dam_nml.replace(
                 'DEF_simulation_time%start_year = 2000',
-                'DEF_simulation_time%start_year = 1999'))
+                'DEF_simulation_time%start_year = 1996'))
             selected=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),
                 '--allow-draft','--only','E0_CTL,E2_L,E3_B')
             self.assertIn('DRY RUN',selected.stdout)
             strict=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),
-                '--allow-draft','--only','E0_CTL,E2_L,E3_B','--validate-scope','all',ok=False)
-            self.assertIn('D_INIT 年份应为 2000–2000',strict.stderr)
+                '--allow-draft','--only','E0_CTL,E2_L,E3_B','--validate-scope','all')
+            self.assertIn('DRY RUN',strict.stdout)
             dependent=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),
-                '--allow-draft','--only','E1_D',ok=False)
-            self.assertIn('D_INIT 年份应为 2000–2000',dependent.stderr)
-            dam_nml.write_text(original_dam_nml)
+                '--allow-draft','--only','E1_D')
+            self.assertIn('DRY RUN',dependent.stdout)
             dry=run(str(TOOLS/'dlb_05_restart_handoff.py'),'handoff','--nml-dir',str(configs),'--allow-draft')
             self.assertIn('DRY RUN',dry.stdout)
             self.assertFalse(any((cases/x['case']).exists() for x in experiments))

@@ -566,6 +566,10 @@ bash "$EXP_DIR/config/jobs/submit_batch.sh" --dry-run --stage dam-init
 bash "$EXP_DIR/config/jobs/submit_batch.sh" --submit --stage dam-init
 ```
 
+D_INIT 默认生成为 `2000–2000`，也支持将 namelist 配置为起始年在
+1996–2000 内、结束年为 2000 的多年度初始化。工作流以 namelist 中的实际年份
+为准，不会自动改写 `run_manifest.json` 中的 `period`。
+
 ## 9. restart 交接
 
 D_INIT 完成后，先执行 dry-run：
@@ -622,7 +626,9 @@ python "$DLB_ROOT/dlb_05_restart_handoff.py" \
 `prepare-dam-init` 始终使用完整校验，`--validate-scope` 仅影响 `handoff`。该选项不会跳过
 restart 完整性、GridRiver 特征或目标覆盖保护检查。
 
-非 D 组的全部 restart 来自 SPINUP；D 组的非 gridriver restart 来自 SPINUP，完整 gridriver restart 来自 D_INIT。工具拒绝覆盖已有 restart、history 或交接记录。
+非 D 组的全部 restart 来自 SPINUP；D 组的非 gridriver restart 来自 SPINUP，完整 gridriver restart 来自 D_INIT。
+即使 D_INIT 运行多年，交接也固定读取并安装 `2000-001-00000` 时间戳的 GridRiver
+restart。工具拒绝覆盖已有 restart、history 或交接记录。
 
 ## 10. 提交正式实验
 

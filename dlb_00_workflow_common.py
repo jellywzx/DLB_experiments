@@ -274,10 +274,13 @@ def validate_study_schedule(study:Study,targets:tuple[Run,...]|None=None)->None:
             raise WorkflowError(f'{run.label} 运行年限应为 2000–2005')
         if boolean(run.conf,'DEF_GridRiverLake_FloodFeedback'):
             raise WorkflowError(f'{run.label} 开启了洪泛—陆面反馈，违反研究的单向耦合设计')
-    if (study.dam_init and any(run.dam for run in selected) and
-        (number(study.dam_init.conf,'DEF_simulation_time%start_year'),
-         number(study.dam_init.conf,'DEF_simulation_time%end_year'))!=(2000,2000)):
-        raise WorkflowError('D_INIT 年份应为 2000–2000')
+    if study.dam_init and any(run.dam for run in selected):
+        dam_start=number(study.dam_init.conf,'DEF_simulation_time%start_year')
+        dam_end=number(study.dam_init.conf,'DEF_simulation_time%end_year')
+        if not 1996<=dam_start<=2000 or dam_end!=2000:
+            raise WorkflowError(
+                f'D_INIT 年份应满足起始年 1996–2000 且结束年为 2000，'
+                f'实际为 {dam_start}–{dam_end}')
 
 
 def select(study:Study,only:str)->tuple[Run,...]:
