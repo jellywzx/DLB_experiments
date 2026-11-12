@@ -12,6 +12,7 @@ from pathlib import Path
 
 TOOLS=Path(__file__).resolve().parents[1]
 SCRIPT=TOOLS/'dlb_09_submit_openbench.py'
+GENERATOR=TOOLS/'dlb_08_generate_openbench.py'
 PYTHON=Path(sys.executable)
 TREATMENTS=('E1_D','E2_L','E3_B','E4_DL','E5_DB','E6_LB','E7_ALL')
 SHORT={'E1_D':'D','E2_L':'L','E3_B':'B','E4_DL':'DL','E5_DB':'DB','E6_LB':'LB','E7_ALL':'DLB'}
@@ -23,14 +24,14 @@ def fixture(root:Path)->Path:
     for treatment in TREATMENTS:
         for kind in ('streamflow','inundation'):
             short=SHORT[treatment];name=f'study_basin_{kind}_{short}'
-            config=configs/f'{kind}_{short}.yaml';output=outputs/name
-            config.write_text(f'project:\n  name: {name}\n  output_dir: {output}\n')
+            config=configs/f'{kind}_{short}.yaml'
+            config.write_text(f'project:\n  name: {name}\n  output_dir: {outputs}\n')
             projects.append({'project':name,'config':str(config.relative_to(root)),
                              'treatment':treatment,'status':'missing'})
     for treatment in ('spinup','ctl'):
         name=f'study_basin_streamflow_{treatment}'
-        config=configs/f'streamflow_{treatment}.yaml';output=outputs/name
-        config.write_text(f'project:\n  name: {name}\n  output_dir: {output}\n')
+        config=configs/f'streamflow_{treatment}.yaml'
+        config.write_text(f'project:\n  name: {name}\n  output_dir: {outputs}\n')
         projects.append({'project':name,'config':str(config.relative_to(root)),
                          'treatment':treatment,'status':'missing'})
     (root/'manifest.yaml').write_text(json.dumps({'evaluation':{'projects':projects}}))
@@ -48,6 +49,26 @@ def run(root:Path,executable:Path,*args:str,ok:bool=True,env:dict|None=None):
 
 
 class OpenBenchJobTests(unittest.TestCase):
+    def test_generator_uses_output_root_without_project_name(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);colm=root/'config/colm/run_manifest.json'
+            colm.parent.mkdir(parents=True)
+            experiments=[{'label':label,'case':f'study_{label}'}
+                         for label in ('E0_CTL',*TREATMENTS)]
+            colm.write_text(json.dumps({'paths':{'case_root':str(root/'cases')},'draft':False,
+                'runs':{'spinup':{'Global':{'case':'study_spinup'}},
+                        'experiments':{'Global':experiments}}}))
+            (root/'manifest.yaml').write_text(json.dumps({'region':'Global','name':'study',
+                'configuration':{'colm':str(colm.relative_to(root))},
+                'evaluation':{'start_year':2001,'end_year':2005}}))
+            result=subprocess.run([str(PYTHON),str(GENERATOR),str(root),'--no-refresh'],
+                                  text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            config=root/'config/openbench/global/streamflow_D.yaml'
+            self.assertIn(f'  output_dir: {root}/openbench_output\n',config.read_text())
+            self.assertNotIn(f'output_dir: {root}/openbench_output/study_global_streamflow_D',
+                             config.read_text())
+
     def test_openbench_is_detected_from_active_path(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);executable=fixture(root);env=os.environ.copy()
@@ -83,6 +104,7 @@ class OpenBenchJobTests(unittest.TestCase):
             self.assertIn('_L.yaml',mapping)
             self.assertIn('_B.yaml',mapping)
             self.assertNotIn('_LB.yaml',mapping)
+            self.assertIn(str(root/'openbench_output/study_basin_streamflow_L'),mapping)
 
     def test_factor_combination_is_exact_and_existing_output_is_skipped(self):
         with tempfile.TemporaryDirectory() as td:

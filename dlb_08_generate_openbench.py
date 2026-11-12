@@ -132,7 +132,7 @@ def main()->int:
                 for kind in ('streamflow','inundation'):
                     project=f'{name}_{basin[0]}_{kind}_{short}'
                     filename=f'{kind}_{short}.yaml';path=basin_dir/filename
-                    text=openbench_yaml(project,output_root/project,(start,end),grid,basin,kind,
+                    text=openbench_yaml(project,output_root,(start,end),grid,basin,kind,
                                         by_label['E0_CTL'],by_label[treatment])
                     path.write_text(text,encoding='utf-8')
                     old=old_projects.get(project,{});old_config=root/old.get('config','')
@@ -145,7 +145,7 @@ def main()->int:
                 for kind in ('streamflow','inundation'):
                     project=f'{name}_{basin[0]}_{kind}_{label}'
                     filename=f'{kind}_{label}.yaml';path=basin_dir/filename
-                    text=openbench_yaml(project,output_root/project,years,grid,basin,kind,run)
+                    text=openbench_yaml(project,output_root,years,grid,basin,kind,run)
                     path.write_text(text,encoding='utf-8')
                     old=old_projects.get(project,{});old_config=root/old.get('config','')
                     status=(old.get('status','missing') if old_config.is_file() and

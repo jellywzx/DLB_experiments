@@ -157,7 +157,7 @@ def main()->int:
         if config in seen_configs:raise ValueError(f'duplicate config: {config}')
         seen_projects.add(project);seen_configs.add(config)
         if not config.is_file():raise ValueError(f'missing OpenBench config: {config}')
-        output=output_dir(config)
+        output=output_dir(config)/project
         safe_field(config,'config');safe_field(output,'output_dir')
         if has_results(output):skipped.append((project,output))
         else:pending.append((project,config,output))
