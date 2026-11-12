@@ -40,11 +40,10 @@ def main()->int:
     p.add_argument('--json',action='store_true')
     p.add_argument('--require-complete',action='store_true')
     p.add_argument('--allow-nonstandard-schedule',action='store_true',
-                   help='Inspect intentional temporary start/end dates')
+                   help=argparse.SUPPRESS)
     p.add_argument('--allow-draft',action='store_true',help=argparse.SUPPRESS)
     args=p.parse_args()
-    study=load_study(args.nml_dir,allow_draft=args.allow_draft,
-                     validate_schedule=not args.allow_nonstandard_schedule)
+    study=load_study(args.nml_dir,allow_draft=args.allow_draft,validate_schedule=False)
     jobdirs=((args.jobs_dir.resolve(),) if args.jobs_dir else
              (study.nml_dir/'jobs_lsf',study.nml_dir/'jobs_slurm',study.nml_dir.parent/'jobs'))
     records=[]

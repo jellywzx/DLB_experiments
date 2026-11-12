@@ -175,6 +175,25 @@ class DamInitScheduleTests(unittest.TestCase):
                             f'D_INIT 年份应满足起始年 1996–2000 且结束年为 2000，实际为 {start}–{end}'):
                         load_study(configs,allow_draft=True)
 
+    def test_stage_status_allows_temporary_rerun_start_year_by_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);configs=root/'configs'
+            run(str(TOOLS/'dlb_02_generate_namelists.py'),'--repo-root',str(REPO),
+                '--out-dir',str(configs),'--case-root',str(root/'cases'),'--forcing-nml','JRA3Q',
+                '--region','USA','--study-id','EXP948','--study-slug','status',
+                '--include-dam-init','--no-lsf','--draft')
+            manifest=json.loads((configs/'run_manifest.json').read_text())
+            ctl=next(x for x in manifest['runs']['experiments']['USA'] if x['label']=='E0_CTL')
+            nml=configs/ctl['nml_file']
+            nml.write_text(nml.read_text().replace(
+                'DEF_simulation_time%start_year = 2000',
+                'DEF_simulation_time%start_year = 2004'))
+            result=run(str(TOOLS/'dlb_06_stage_status.py'),'--nml-dir',str(configs),
+                       '--allow-draft','--json')
+            stages=json.loads(result.stdout)
+            self.assertFalse(stages['colm_complete'])
+            self.assertEqual(stages['records'][-1]['experiments'][0]['monthly_expected'],60)
+
 
 @unittest.skipUnless(REPO.is_dir(),'local CoLM checkout unavailable')
 class ExperimentTemplateTests(unittest.TestCase):

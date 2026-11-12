@@ -454,7 +454,9 @@ python "$DLB_ROOT/dlb_03_generate_jobs.py" \
 ```
 
 该选项只跳过标准年份范围校验，不跳过 case 名称、过程开关、输出路径等结构检查。
-后续使用 `dlb_06_stage_status.py` 或 `dlb_07_refresh_experiment.py` 检查该临时配置时，也需追加同名选项。
+`dlb_06_stage_status.py` 默认允许这类续跑年份，因为它只负责按 manifest
+记录的原始实验目标检查完成状态；无需追加该选项。`dlb_07_refresh_experiment.py`
+保留同名选项以兼容已有命令。
 
 生成内容包括 SPINUP、D_INIT、E0–E7 共 10 个作业和 `submit_batch.sh`。阶段命令为：
 
@@ -692,6 +694,12 @@ python "$DLB_ROOT/dlb_06_stage_status.py" \
   --nml-dir "$EXP_DIR/config/colm" \
   --require-complete
 ```
+
+状态检查会读取 namelist 中的 case 名、输出目录和过程开关来定位结果，但不会要求
+续跑时临时修改的起止年份仍为标准范围。整个实验是否完成仍以
+`run_manifest.json` 的原始目标为准：评估期月度 history、最终 restart 和对应的
+success marker 必须全部存在。配置与科学约束检查仍由生成、作业生成和 preflight
+阶段负责。
 
 ## 12. OpenBench
 
