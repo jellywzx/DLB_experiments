@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import os
 import subprocess
 import sys
@@ -178,6 +179,159 @@ class OpenBenchJobTests(unittest.TestCase):
             self.assertEqual(job.read_text(),before)
             self.assertIn('run "$CONFIG" --cores 2',capture.read_text())
             self.assertNotIn('run "$CONFIG" --cores 9',capture.read_text())
+
+
+class RetryFailedTests(unittest.TestCase):
+    def prepare(self,root):
+        executable=fixture(root)
+        output=root/'openbench_output/study_basin_streamflow_D'
+        output.mkdir(parents=True)
+        (output/'.openbench_failed').touch()
+        (output/'old.nc').write_bytes(b'original data')
+        return executable,output
+
+    def execute(self,root,output,**updates):
+        env=os.environ.copy()
+        env.update(LSB_JOBINDEX='1',OPENBENCH_CALLS=str(root/'calls'),TEST_OUTPUT=str(output))
+        env.update(updates)
+        job=root/'config/openbench_jobs/submit_openbench_D_retry_failed_array.lsf'
+        subprocess.run(['bash','-n',str(job)],check=True)
+        return subprocess.run(['bash',str(job)],env=env,text=True,capture_output=True)
+
+    def test_classification(self):
+        from dlb_09_submit_openbench import result_state
+        for marker in ('.openbench_failed','failed.marker'):
+            with self.subTest(marker=marker),tempfile.TemporaryDirectory() as td:
+                path=Path(td);(path/marker).touch()
+                self.assertEqual(result_state(path),'failed')
+                (path/'.openbench_success').touch()
+                self.assertEqual(result_state(path),'conflicting')
+                (path/'run.log').write_text('All phases complete: 2 evaluated, 1 errors\n')
+                self.assertEqual(result_state(path),'failed')
+                (path/'.dlb_openbench_running').touch()
+                self.assertEqual(result_state(path),'running')
+
+    def test_preview_filters_and_preserves_results(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable,output=self.prepare(root)
+            other=root/'openbench_output/study_basin_inundation_D';other.mkdir()
+            (other/'.openbench_success').touch()
+            result=run(root,executable,'-D','--retry-failed')
+            self.assertIn('pending=1 skipped=1',result.stdout)
+            self.assertIn('DRY-RUN',result.stdout)
+            self.assertEqual((output/'old.nc').read_bytes(),b'original data')
+            self.assertFalse((output.parent/'.dlb_openbench_backups').exists())
+            mapping=next((root/'config/openbench_jobs').glob('*retry_failed*_projects.tsv'))
+            self.assertNotIn('inundation_D.yaml',mapping.read_text())
+
+    def test_manifest_alone_and_running_are_not_retried(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable,output=self.prepare(root)
+            (output/'.dlb_openbench_running').touch()
+            manifest=json.loads((root/'manifest.yaml').read_text())
+            for project in manifest['evaluation']['projects']:project['status']='failed'
+            (root/'manifest.yaml').write_text(json.dumps(manifest))
+            result=run(root,executable,'--all','--retry-failed')
+            self.assertIn('pending=0',result.stdout)
+            self.assertFalse((root/'config/openbench_jobs').exists())
+
+    def test_runtime_backup_success_and_duplicate_snapshot(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable,output=self.prepare(root)
+            run(root,executable,'-D','--retry-failed')
+            result=self.execute(root,output)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertTrue((output/'.openbench_success').is_file())
+            backups=list((output.parent/'.dlb_openbench_backups').iterdir())
+            self.assertEqual(len(backups),1)
+            self.assertEqual((backups[0]/'old.nc').read_bytes(),b'original data')
+            self.assertFalse((output/'old.nc').exists())
+            calls=(root/'calls').read_text()
+            self.assertEqual(self.execute(root,output).returncode,0)
+            self.assertEqual((root/'calls').read_text(),calls)
+
+    def test_runtime_detects_zero_exit_with_errors_and_does_not_repeat(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable,output=self.prepare(root)
+            executable.write_text('#!/usr/bin/env bash\n'
+                'echo "$@" >> "$OPENBENCH_CALLS"\n'
+                'if [[ "$1" == run ]]; then\n'
+                '  echo "All phases complete: 2 evaluated, 1 errors" > "$TEST_OUTPUT/run.log"\n'
+                'fi\n')
+            run(root,executable,'-D','--retry-failed')
+            self.assertNotEqual(self.execute(root,output).returncode,0)
+            self.assertTrue((output/'.openbench_failed').is_file())
+            calls=(root/'calls').read_text()
+            self.assertEqual(self.execute(root,output).returncode,0)
+            self.assertEqual((root/'calls').read_text(),calls)
+
+    def test_retry_nonzero_check_and_run_are_marked_failed(self):
+        for command in ('check','run'):
+            with self.subTest(command=command),tempfile.TemporaryDirectory() as td:
+                root=Path(td);executable,output=self.prepare(root)
+                executable.write_text('#!/usr/bin/env bash\n'
+                    'echo "$@" >> "$OPENBENCH_CALLS"\n'
+                    f'if [[ "$1" == {command} ]]; then exit 7; fi\n')
+                run(root,executable,'-D','--retry-failed')
+                result=self.execute(root,output)
+                self.assertEqual(result.returncode,7,result.stderr)
+                self.assertTrue((output/'.openbench_failed').is_file())
+                self.assertFalse((output/'.dlb_openbench_running').exists())
+                if command=='check':self.assertNotIn('run ',(root/'calls').read_text())
+
+    def test_recheck_success_running_and_lock(self):
+        for state in ('success','running','lock'):
+            with self.subTest(state=state),tempfile.TemporaryDirectory() as td:
+                root=Path(td);executable,output=self.prepare(root)
+                run(root,executable,'-D','--retry-failed')
+                with (output.parent/f'.{output.name}.retry.lock').open('a') as lock:
+                    if state=='lock':fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                    elif state=='running':(output/'.dlb_openbench_running').touch()
+                    else:
+                        (output/'.openbench_failed').unlink()
+                        (output/'.openbench_success').touch()
+                    result=self.execute(root,output)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertFalse((root/'calls').exists())
+                self.assertTrue((output/'old.nc').exists())
+
+    def test_retry_snapshot_isolated_reused_and_mapping_immutable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable,output=self.prepare(root)
+            run(root,executable,'-D')
+            normal=root/'config/openbench_jobs/submit_openbench_D_array.lsf'
+            before=normal.read_bytes()
+            run(root,executable,'-D','--retry-failed')
+            mapping=next(normal.parent.glob('*retry_failed*_projects.tsv'))
+            snapshot=mapping.read_bytes()
+            bin_dir=root/'bin';bin_dir.mkdir()
+            bsub=bin_dir/'bsub'
+            bsub.write_text('#!/usr/bin/env bash\ncat > "$BSUB_CAPTURE"\necho "Job <456>"\n')
+            bsub.chmod(0o755);env=os.environ.copy()
+            env.update(PATH=str(bin_dir)+os.pathsep+env.get('PATH',''),BSUB_CAPTURE=str(root/'submitted'))
+            result=run(root,executable,'-D','--retry-failed','--submit',env=env)
+            self.assertIn('Reusing generated job snapshot',result.stdout)
+            self.assertIn(str(mapping),(root/'submitted').read_text())
+            run(root,executable,'-D','--retry-failed','--overwrite')
+            self.assertEqual(mapping.read_bytes(),snapshot)
+            self.assertEqual(len(list(normal.parent.glob('*retry_failed*_projects.tsv'))),2)
+            self.assertEqual(normal.read_bytes(),before)
+
+    def test_normal_job_does_not_mark_internal_failure_successful(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable=fixture(root)
+            output=root/'openbench_output/study_basin_streamflow_D'
+            executable.write_text('#!/usr/bin/env bash\n'
+                'if [[ "$1" == run ]]; then\n'
+                '  echo "Evaluation phase: 2 succeeded, 1 failed" > "$TEST_OUTPUT/run.log"\n'
+                'fi\n')
+            run(root,executable,'-D')
+            env=os.environ.copy();env.update(LSB_JOBINDEX='1',TEST_OUTPUT=str(output))
+            job=root/'config/openbench_jobs/submit_openbench_D_array.lsf'
+            result=subprocess.run(['bash',str(job)],env=env,capture_output=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertTrue((output/'.openbench_failed').is_file())
+            self.assertFalse((output/'.openbench_success').exists())
 
 
 if __name__=='__main__':
