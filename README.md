@@ -230,6 +230,7 @@ python "$DLB_ROOT/dlb_05_restart_handoff.py" --help
 python "$DLB_ROOT/dlb_06_stage_status.py" --help
 python "$DLB_ROOT/dlb_07_refresh_experiment.py" --help
 python "$DLB_ROOT/dlb_08_generate_openbench.py" --help
+python "$DLB_ROOT/dlb_09_submit_openbench.py" --help
 ```
 
 ## 2. 创建完整实验
@@ -729,6 +730,47 @@ openbench run "$EXP_DIR/config/openbench/mekong/streamflow_D.yaml"
 ```
 
 OpenBench 输出路径已经写入 YAML，统一位于实验目录的 `openbench_output/`。
+
+批量生成 LSF 独占节点作业时，每个选项直接对应一套实验：`-D`、`-L`、
+`-B` 分别选择 E1_D、E2_L、E3_B，`-DL`、`-DB`、`-LB`、`-DLB`
+分别选择对应的组合实验。分开的选项表示同时提交多套实验，例如 `-L -B`
+同时选择 E2_L 和 E3_B；只有 `-LB` 才选择 E6_LB。
+
+```bash
+source .venv/bin/activate
+
+# 默认只生成作业并预览 bsub 命令
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  -L -B \
+  --queue normal --cores 2 --slots-per-node 48 --memory 150G --walltime 24:00 \
+  --max-concurrent 5
+
+# 确认预览后才实际提交
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  -L -B \
+  --submit
+```
+
+`--submit` 会直接复用前一次 dry-run 生成的作业快照。只有需要修改 queue、cores、
+slots、memory、walltime、并发数或 OpenBench 路径并重新生成作业时，才使用
+`--overwrite --submit`；`--overwrite` 始终只替换作业清单和 LSF 脚本。
+
+脚本默认从当前 `PATH` 查找 `openbench`，并将绝对路径写入 LSF 作业，因此计算
+节点不需要再次激活虚拟环境。如果不使用 `source` 激活环境，也可以显式传入
+`--openbench-exe /path/to/openbench`。
+
+使用 `--all` 选择 manifest 中的全部 OpenBench 项目。未指定实验选择时脚本会
+停止，不会默认提交全部任务。每个 YAML 是一个 LSF array 元素，默认最多同时运行
+5 个，并使用 `span[hosts=1]` 将默认的 48 个 slots 放在同一节点。`normal` 队列
+不接受 `-x`，所以这里不是 LSF 的绝对独占：只有当节点在 LSF 中总容量正好为
+48 slots 且不允许超配时，申请 48 slots 才会占满该节点，普通作业无法再进入。
+如果节点容量不同，应通过 `--slots-per-node` 指定实际值；管理员特权作业或不消耗
+这些 slots 的特殊任务仍可能共享节点。节点不足时由 LSF 排队。
+
+脚本会自动跳过已有非空输出目录的项目，不覆盖成功、失败或部分结果。这个检查
+会在生成任务清单和作业真正启动时各执行一次，以覆盖排队期间结果发生变化的情况。
+如需重新计算，应先人工备份或移走对应的 `openbench_output/<project>`，脚本不会
+自动删除任何评估结果。
 
 修改 OpenBench 生成代码或评估年份后，可以单独覆盖 YAML，不会改动
 CoLM namelist、jobs、case 或已有 OpenBench 输出：
