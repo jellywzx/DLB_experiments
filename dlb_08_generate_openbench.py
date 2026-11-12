@@ -18,9 +18,9 @@ MASK_ROOT=Path('/share/home/dq134/wzx/openbench/postprocess/basin_mask/outputs')
 BASINS={
     'USA':(
         ('missouri_before_confluence',[36.0,51.0],[-115.0,-89.0],
-         MASK_ROOT/'basin_parts_06min/missouri_before_confluence/missouri_before_confluence_basin.nc'),
+         MASK_ROOT/'basin_masks_06min/missouri/missouri_basin.nc'),
         ('mississippi_cairo_to_mouth',[28.0,40.0],[-108.0,-88.0],
-         MASK_ROOT/'basin_parts_06min/mississippi_cairo_to_mouth_added_catchments/mississippi_cairo_to_mouth_added_catchments_basin.nc'),
+         MASK_ROOT/'basin_masks_06min/lower_mississippi/lower_mississippi_basin.nc'),
     ),
     'SA':(('amazon',[-22.0,11.0],[-82.0,-35.0],MASK_ROOT/'basin_masks_06min/amazon/amazon_basin.nc'),),
     'Mekong':(('mekong',[9.0,34.0],[93.0,109.0],MASK_ROOT/'basin_masks_06min/mekong/mekong_basin.nc'),),
