@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 TOOLS=Path(__file__).resolve().parents[1]
 PYTHON=Path(sys.executable)
@@ -83,6 +84,17 @@ def tree_hash(root:Path)->str:
         digest.update(str(path.relative_to(root)).encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+class RestartHandoffRoutingTests(unittest.TestCase):
+    def test_global_routing_does_not_reserve_riverlake_directory(self):
+        from dlb_05_restart_handoff import verify_empty_target
+        with tempfile.TemporaryDirectory() as td:
+            case=Path(td)/'case'
+            (case/'riverlake').mkdir(parents=True)
+            run=SimpleNamespace(case_dir=case,restart=case/'restart',history=case/'history')
+            self.assertEqual(verify_empty_target(run,False),[])
+            self.assertIn('riverlake 已存在',verify_empty_target(run,True)[0])
 
 
 class PreprocessorMacroTests(unittest.TestCase):

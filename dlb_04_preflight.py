@@ -10,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 from dlb_site_config import parse_site_args,audit_site,unsupported_fields,PATH_KEYS,forcing_month_issues
-from dlb_00_workflow_common import (WorkflowError,load_study,select,assignments,string,number,
+from dlb_00_workflow_common import (WorkflowError,load_study,select,assignments,string,number,boolean,
  path_value,stamp,timefiles,constfiles,validate_restart_filenames,gridriver_file,
  gridriver_integrity,probe_netcdf,preprocessor_state,ROUTING_FIELDS,LEVEE_FIELDS,BIF_FIELDS,
  DAM_FIELDS,error_exit)
@@ -168,13 +168,18 @@ def main()->int:
         except WorkflowError as exc:errors.append(f'D_INIT gridriver 读取失败: {exc}')
 
     if args.phase in ('experiments','all'):
-        river_source=study.spinup.case_dir/'riverlake/unitcatchment_regional.nc'
+        regional_routing=boolean(study.spinup.conf,'DEF_UnitCatchment_regional')
+        river_source=(study.spinup.case_dir/'riverlake/unitcatchment_regional.nc'
+                      if regional_routing else None)
         for run in selected:
             add((run.case_dir/'landdata').is_dir(),f'{run.label} landdata 已就绪')
-            regional=run.case_dir/'riverlake/unitcatchment_regional.nc'
-            add(regional.is_symlink() and regional.is_file() and
-                regional.resolve()==river_source.resolve(),
-                f'{run.label} regional routing 链接已就绪: {regional}')
+            if river_source is not None:
+                regional=run.case_dir/'riverlake/unitcatchment_regional.nc'
+                add(regional.is_symlink() and regional.is_file() and
+                    regional.resolve()==river_source.resolve(),
+                    f'{run.label} regional routing 链接已就绪: {regional}')
+            else:
+                ok.append(f'{run.label} global routing 不需要 regional routing 链接')
             fs=timefiles(run,2000);cs=constfiles(run)
             misses=validate_restart_filenames(fs,run,2000)+validate_restart_filenames(cs,run,None)
             if misses:

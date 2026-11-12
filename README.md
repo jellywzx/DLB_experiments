@@ -616,6 +616,10 @@ python "$DLB_ROOT/dlb_05_restart_handoff.py" \
 `E7_ALL` 时才会校验 D_INIT 年份和 restart。因此，仅处理 `E0_CTL`、`E2_L`、
 `E3_B` 或 `E6_LB` 时，未选中的 D_INIT 临时配置不会阻断交接。
 
+脚本根据 SPINUP 的 `DEF_UnitCatchment_regional` 判断 routing 模式。Regional
+routing 会分发 `unitcatchment_regional.nc` 软链接；Global routing 不要求也不会
+创建该文件或对应的 `riverlake` 目录。
+
 如需在交接前对 SPINUP、D_INIT 和全部 E0–E7 运行时间配置执行完整严格校验，显式使用：
 
 ```bash

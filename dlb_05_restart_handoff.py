@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """01 — Transactional D_INIT preparation and E0–E7 restart handoff.
 
-The default is a read-only dry run.  Only --apply creates landdata and regional
-routing links, restart directories, and per-case handoff records.  Source files
-are never modified and existing restart/history products are never overwritten.
+The default is a read-only dry run.  Only --apply creates landdata, restart
+directories, per-case handoff records, and regional-routing links when enabled.
+Source files are never modified and existing restart/history products are never
+overwritten.
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from dlb_00_workflow_common import (WorkflowError, constfiles, error_exit,
+from dlb_00_workflow_common import (WorkflowError, boolean, constfiles, error_exit,
     gridriver_file, gridriver_integrity, load_study, select, stamp, timefiles,
     validate_restart_filenames, validate_study_schedule)
 
@@ -47,15 +48,16 @@ def copy_one(source:Path,target:Path,source_case:str,target_case:str,hashes:bool
     return item
 
 
-def verify_empty_target(run)->list[str]:
+def verify_empty_target(run,regional_routing:bool)->list[str]:
     issues=[]
     if run.restart.exists() or run.restart.is_symlink():issues.append(f'restart 已存在: {run.restart}')
     if run.history.is_dir() and any(run.history.iterdir()):issues.append(f'history 已有内容: {run.history}')
     if (run.case_dir/'.aas_restart_handoff.json').exists():issues.append('交接记录已存在')
     land=run.case_dir/'landdata'
     if land.exists() or land.is_symlink():issues.append(f'landdata 已存在，拒绝替换: {land}')
-    river=run.case_dir/'riverlake'
-    if river.exists() or river.is_symlink():issues.append(f'riverlake 已存在，拒绝替换: {river}')
+    if regional_routing:
+        river=run.case_dir/'riverlake'
+        if river.exists() or river.is_symlink():issues.append(f'riverlake 已存在，拒绝替换: {river}')
     return issues
 
 
@@ -92,8 +94,10 @@ def main()->int:
     targets=select(study,args.only)
     validate_study_schedule(study,None if args.validate_scope=='all' else targets)
     spin=study.spinup
-    river_source=spin.case_dir/'riverlake/unitcatchment_regional.nc'
-    if not river_source.is_file():
+    regional_routing=boolean(spin.conf,'DEF_UnitCatchment_regional')
+    river_source=(spin.case_dir/'riverlake/unitcatchment_regional.nc'
+                  if regional_routing else None)
+    if river_source is not None and not river_source.is_file():
         raise WorkflowError(f'SPINUP regional routing 不存在: {river_source}')
     spin_time=timefiles(spin,2000)
     spin_const=constfiles(spin)
@@ -109,12 +113,15 @@ def main()->int:
         if errors:raise WorkflowError('D_INIT gridriver 不完整: '+'; '.join(errors))
     errors=[]
     for run in targets:
-        errors.extend(f'{run.label}: {x}' for x in verify_empty_target(run))
+        errors.extend(f'{run.label}: {x}' for x in verify_empty_target(run,regional_routing))
         donor=dam_grid if run.dam else spin_grid
         grid_errors,notes=gridriver_integrity(donor,run.dam,run.levee,run.bif)
         errors.extend(f'{run.label}: {x}' for x in grid_errors)
         print(f'{run.label:7} non-grid=SPINUP gridriver={"D_INIT" if run.dam else "SPINUP"}')
-        print(f'        regional routing -> {river_source.resolve()}')
+        if river_source is not None:
+            print(f'        regional routing -> {river_source.resolve()}')
+        else:
+            print('        routing mode=global; regional routing not required')
         for note in notes:print('  NOTE:',note)
     if errors:raise WorkflowError('交接预检失败:\n  '+'\n  '.join(errors))
     if not args.apply:
@@ -154,14 +161,16 @@ def main()->int:
             land=run.case_dir/'landdata'
             land.symlink_to(land_source.resolve(),target_is_directory=True)
             installed.append(land)
-            river=run.case_dir/'riverlake'
-            river.mkdir()
-            installed.append(river)
-            regional=river/'unitcatchment_regional.nc'
-            regional.symlink_to(river_source.resolve())
+            if river_source is not None:
+                river=run.case_dir/'riverlake'
+                river.mkdir()
+                installed.append(river)
+                regional=river/'unitcatchment_regional.nc'
+                regional.symlink_to(river_source.resolve())
             record={'schema_version':2,'source_case':spin.case,
                 'gridriver_source_case':study.dam_init.case if run.dam else spin.case,
-                'regional_routing_source':str(river_source.resolve()),
+                'routing_mode':'regional' if regional_routing else 'global',
+                'regional_routing_source':str(river_source.resolve()) if river_source else None,
                 'target_case':run.case,'stamp':stamp(2000),
                 'switches':{'dam':run.dam,'levee':run.levee,'bifurcation':run.bif},
                 'files':files,'verification':'sha256' if args.hash else 'size'}
