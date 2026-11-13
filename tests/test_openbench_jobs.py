@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 TOOLS=Path(__file__).resolve().parents[1]
 SCRIPT=TOOLS/'dlb_09_submit_openbench.py'
@@ -22,18 +24,19 @@ def fixture(root:Path)->Path:
     configs=root/'config/openbench/basin';configs.mkdir(parents=True)
     outputs=root/'openbench_output';projects=[]
     for treatment in TREATMENTS:
-        for kind in ('streamflow','inundation'):
+        for kind in ('streamflow','inundation_fraction','inundation_area'):
             short=SHORT[treatment];name=f'study_basin_{kind}_{short}'
             config=configs/f'{kind}_{short}.yaml'
             config.write_text(f'project:\n  name: {name}\n  output_dir: {outputs}\n')
             projects.append({'project':name,'config':str(config.relative_to(root)),
                              'treatment':treatment,'status':'missing'})
-    for treatment in ('spinup','ctl'):
-        name=f'study_basin_streamflow_{treatment}'
-        config=configs/f'streamflow_{treatment}.yaml'
-        config.write_text(f'project:\n  name: {name}\n  output_dir: {outputs}\n')
-        projects.append({'project':name,'config':str(config.relative_to(root)),
-                         'treatment':treatment,'status':'missing'})
+    for treatment in ('spinup','ctl','comparisons'):
+        for kind in ('streamflow','inundation_fraction','inundation_area'):
+            name=f'study_basin_{kind}_{treatment}'
+            config=configs/f'{kind}_{treatment}.yaml'
+            config.write_text(f'project:\n  name: {name}\n  output_dir: {outputs}\n')
+            projects.append({'project':name,'config':str(config.relative_to(root)),
+                             'treatment':treatment,'status':'missing'})
     (root/'manifest.yaml').write_text(json.dumps({'evaluation':{'projects':projects}}))
     executable=root/'openbench'
     executable.write_text('#!/usr/bin/env bash\necho "$@" >> "$OPENBENCH_CALLS"\n')
@@ -72,9 +75,8 @@ class OpenBenchJobTests(unittest.TestCase):
                                   text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stderr)
             config=root/'config/openbench/global/streamflow_D.yaml'
-            self.assertIn(f'  output_dir: {root}/openbench_output\n',config.read_text())
-            self.assertNotIn(f'output_dir: {root}/openbench_output/study_global_streamflow_D',
-                             config.read_text())
+            self.assertEqual(yaml.safe_load(config.read_text())['project']['output_dir'],
+                             str(root/'openbench_output'))
 
     def test_openbench_is_detected_from_active_path(self):
         with tempfile.TemporaryDirectory() as td:
@@ -85,7 +87,7 @@ class OpenBenchJobTests(unittest.TestCase):
             self.assertEqual(result.returncode,0,result.stderr)
             job=(root/'config/openbench_jobs/submit_openbench_D_array.lsf').read_text()
             self.assertIn(f'OPENBENCH={executable.resolve()}',job)
-            self.assertIn('#BSUB -J "openbench_D[1-2]%5"',job)
+            self.assertIn('#BSUB -J "openbench_D[1-3]%20"',job)
 
     def test_each_selector_maps_to_one_exact_treatment(self):
         expected={('-D',):'E1_D',('-L',):'E2_L',('-B',):'E3_B',
@@ -96,7 +98,7 @@ class OpenBenchJobTests(unittest.TestCase):
                 root=Path(td);executable=fixture(root);run(root,executable,*flags)
                 label=SHORT[treatment]
                 mapping=(root/f'config/openbench_jobs/openbench_{label}_projects.tsv').read_text()
-                self.assertEqual(mapping.count('\n'),3)
+                self.assertEqual(mapping.count('\n'),4)
                 self.assertIn(f'_{label}.yaml',mapping)
                 for other in set(SHORT.values())-{label}:
                     self.assertNotIn(f'_{other}.yaml',mapping)
@@ -105,9 +107,9 @@ class OpenBenchJobTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);executable=fixture(root)
             result=run(root,executable,'-L','-B')
-            self.assertIn('Selection L_B: selected=4 pending=4 skipped=0',result.stdout)
+            self.assertIn('Selection L_B: selected=6 pending=6 skipped=0',result.stdout)
             mapping=(root/'config/openbench_jobs/openbench_L_B_projects.tsv').read_text()
-            self.assertEqual(mapping.count('\n'),5)
+            self.assertEqual(mapping.count('\n'),7)
             self.assertIn('_L.yaml',mapping)
             self.assertIn('_B.yaml',mapping)
             self.assertNotIn('_LB.yaml',mapping)
@@ -119,13 +121,14 @@ class OpenBenchJobTests(unittest.TestCase):
             existing=root/'openbench_output/study_basin_streamflow_DL'
             existing.mkdir(parents=True);(existing/'result.nc').write_bytes(b'result')
             result=run(root,executable,'-DL','--max-concurrent','3')
-            self.assertIn('selected=2 pending=1 skipped=1',result.stdout)
+            self.assertIn('selected=3 pending=2 skipped=1',result.stdout)
             mapping=(root/'config/openbench_jobs/openbench_DL_projects.tsv').read_text()
-            self.assertIn('inundation_DL.yaml',mapping)
+            self.assertIn('inundation_fraction_DL.yaml',mapping)
+            self.assertIn('inundation_area_DL.yaml',mapping)
             self.assertNotIn('streamflow_DL.yaml',mapping)
             job=root/'config/openbench_jobs/submit_openbench_DL_array.lsf'
             text=job.read_text()
-            self.assertIn('#BSUB -J "openbench_DL[1-1]%3"',text)
+            self.assertIn('#BSUB -J "openbench_DL[1-2]%3"',text)
             self.assertIn('#BSUB -R "span[hosts=1]"',text)
             self.assertIn('#BSUB -n 48',text)
             self.assertNotIn('#BSUB -x',text)
@@ -151,7 +154,40 @@ class OpenBenchJobTests(unittest.TestCase):
             self.assertEqual(result.returncode,2)
             self.assertIn('select --all',result.stderr)
             result=run(root,executable,'--all')
-            self.assertIn('selected=16 pending=16 skipped=0',result.stdout)
+            self.assertIn('selected=30 pending=30 skipped=0',result.stdout)
+
+    def test_comparisons_selection_and_combined_selector(self):
+        for flags,label,count in ((('--comparisons',),'comparisons',3),
+                                  (('-D','--comparisons'),'D_comparisons',6)):
+            with self.subTest(flags=flags),tempfile.TemporaryDirectory() as td:
+                root=Path(td);executable=fixture(root)
+                result=run(root,executable,*flags)
+                self.assertIn(f'selected={count} pending={count} skipped=0',result.stdout)
+                rows=(root/f'config/openbench_jobs/openbench_{label}_projects.tsv').read_text().splitlines()[1:]
+                self.assertEqual(len(rows),count)
+                self.assertEqual(sum(row.split('\t')[1].endswith('_comparisons') for row in rows),3)
+                job=root/f'config/openbench_jobs/submit_openbench_{label}_array.lsf'
+                subprocess.run(['bash','-n',str(job)],check=True)
+
+    def test_all_rejects_comparisons_and_experiment_selectors(self):
+        for flags in (('--all','--comparisons'),('--all','-D'),('--all','-D','--comparisons')):
+            with self.subTest(flags=flags),tempfile.TemporaryDirectory() as td:
+                root=Path(td);executable=fixture(root)
+                result=run(root,executable,*flags,ok=False)
+                self.assertEqual(result.returncode,2)
+                self.assertIn('--all cannot be combined',result.stderr)
+                self.assertFalse((root/'config/openbench_jobs').exists())
+
+    def test_comparisons_nonempty_output_is_protected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable=fixture(root)
+            output=root/'openbench_output/study_basin_streamflow_comparisons'
+            output.mkdir(parents=True);(output/'result.nc').write_bytes(b'protected')
+            result=run(root,executable,'--comparisons')
+            self.assertIn('selected=3 pending=2 skipped=1',result.stdout)
+            mapping=(root/'config/openbench_jobs/openbench_comparisons_projects.tsv').read_text()
+            self.assertNotIn('streamflow_comparisons.yaml',mapping)
+            self.assertEqual((output/'result.nc').read_bytes(),b'protected')
 
     def test_submit_uses_bsub_stdin(self):
         with tempfile.TemporaryDirectory() as td:
@@ -162,7 +198,7 @@ class OpenBenchJobTests(unittest.TestCase):
             env.update(PATH=str(bin_dir)+os.pathsep+env.get('PATH',''),BSUB_CAPTURE=str(capture))
             result=run(root,executable,'-D','--submit',env=env)
             self.assertIn('Job <123>',result.stdout)
-            self.assertIn('openbench_D[1-2]%5',capture.read_text())
+            self.assertIn('openbench_D[1-3]%20',capture.read_text())
 
     def test_submit_after_dry_run_reuses_snapshot_without_overwrite(self):
         with tempfile.TemporaryDirectory() as td:
@@ -176,7 +212,7 @@ class OpenBenchJobTests(unittest.TestCase):
             result=run(root,executable,'-L','-B','--cores','9','--submit',env=env)
             self.assertIn('Reusing generated job snapshot',result.stdout)
             self.assertEqual(job.read_text(),before)
-            self.assertIn('run "$CONFIG" --cores 2',capture.read_text())
+            self.assertIn('run "$CONFIG" --cores 4',capture.read_text())
             self.assertNotIn('run "$CONFIG" --cores 9',capture.read_text())
 
 

@@ -1,0 +1,28 @@
+project:
+  tim_res: Month
+evaluation:
+  variables: [Inundation_Area]
+reference:
+  Inundation_Area: GIEMS_v2_LowRes
+metrics:
+  - bias
+  - RMSE
+  - correlation
+  - percent_bias
+  - NSE
+  - KGE
+  - KGESS
+  - MFM
+scores:
+  - Overall_Score
+  - nBiasScore
+  - nRMSEScore
+  - nPhaseScore
+  - nIavScore
+  - nSpatialScore
+  - nSeasonalityScore
+comparison:
+  items: [Taylor_Diagram, HeatMap, Diff_Plot]
+statistics:
+  enabled: false
+  items: []

@@ -105,17 +105,18 @@ def main()->int:
     p.add_argument('-DB',dest='select_db',action='store_true',help='Select E5_DB')
     p.add_argument('-LB',dest='select_lb',action='store_true',help='Select E6_LB')
     p.add_argument('-DLB',dest='select_dlb',action='store_true',help='Select E7_ALL')
+    p.add_argument('--comparisons',action='store_true',help='Select eight-experiment comparison projects')
     p.add_argument('--all',dest='all_projects',action='store_true',help='Select every OpenBench project')
     p.add_argument('--openbench-exe',type=Path,
                    help='OpenBench executable; default: openbench from the current PATH')
     p.add_argument('--queue',default='normal')
-    p.add_argument('--cores',type=int,default=2)
+    p.add_argument('--cores',type=int,default=4)
     p.add_argument('--slots-per-node',type=int,default=48,
                    help='LSF slots reserved on one host; full-node only when this equals its capacity (default: 48)')
     p.add_argument('--memory',default='150G')
     p.add_argument('--walltime',default='24:00')
-    p.add_argument('--max-concurrent',type=int,default=5,
-                   help='Maximum simultaneous array tasks (default: 5)')
+    p.add_argument('--max-concurrent',type=int,default=20,
+                   help='Maximum simultaneous array tasks (default: 20)')
     p.add_argument('--out-dir',type=Path,help='Default: EXP_DIR/config/openbench_jobs')
     p.add_argument('--log-dir',type=Path,help='Default: EXP_DIR/logs/openbench')
     p.add_argument('--overwrite',action='store_true',help='Replace generated mapping/job files only')
@@ -123,9 +124,10 @@ def main()->int:
     args=p.parse_args()
 
     requested=[(short,treatment) for short,treatment,dest in SELECTIONS if getattr(args,dest)]
+    if args.comparisons:requested.append(('comparisons','comparisons'))
     if args.all_projects and requested:p.error('--all cannot be combined with experiment selectors')
     if not args.all_projects and not requested:
-        p.error('select --all or at least one of -D/-L/-B/-DL/-DB/-LB/-DLB')
+        p.error('select --all, --comparisons or at least one of -D/-L/-B/-DL/-DB/-LB/-DLB')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.queue):p.error('invalid --queue')
     if not 1<=args.cores<=100000:p.error('--cores must be >= 1')
     if not 1<=args.slots_per_node<=100000:p.error('--slots-per-node must be >= 1')
