@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+import yaml
+
 TOOLS=Path(__file__).resolve().parents[1]
 PYTHON=Path(sys.executable)
 FIXTURE=tempfile.TemporaryDirectory()
@@ -207,12 +209,11 @@ class DamInitScheduleTests(unittest.TestCase):
             self.assertEqual(stages['records'][-1]['experiments'][0]['monthly_expected'],60)
 
 
-@unittest.skipUnless(REPO.is_dir(),'local CoLM checkout unavailable')
 class ExperimentTemplateTests(unittest.TestCase):
     def test_all_regions_and_job_stages(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);cases=root/'cases';cases.mkdir()
-            expected={'USA':36,'SA':18,'Mekong':18,'Global':18}
+            expected={'USA':60,'SA':30,'Mekong':30,'Global':30}
             for index,(region,count) in enumerate(expected.items(),901):
                 run(str(TOOLS/'dlb_01_create_experiment.py'),f'EXP{index}','smoke',region,
                     '--repo-root',str(REPO),'--case-root',str(cases),
@@ -220,27 +221,21 @@ class ExperimentTemplateTests(unittest.TestCase):
                 exp=root/'experiments'/f'EXP{index}_smoke_{region}'
                 yaml_files=list((exp/'config/openbench').rglob('*.yaml'))
                 self.assertEqual(len(yaml_files),count)
-                try:
-                    import yaml
-                except ImportError:
-                    yaml=None
                 for config in yaml_files:
-                    text=config.read_text()
-                    self.assertNotIn('__',text)
-                    if config.stem not in ('streamflow_spinup','inundation_spinup'):
-                        self.assertIn('E0_CTL:',text)
-                    self.assertIn('_hist_unitcat_',text)
-                    if yaml:yaml.safe_load(text)
+                    data=yaml.safe_load(config.read_text())
+                    self.assertEqual(len(data['evaluation']['variables']),1)
+                    if not config.stem.endswith('_spinup'):
+                        self.assertIn('E0_CTL',data['simulation'])
+                    for simulation in data['simulation'].values():
+                        self.assertIn('_hist_unitcat_',next(iter(simulation['variables'].values()))['prefix'])
                 for basin_dir in (exp/'config/openbench').iterdir():
-                    self.assertTrue((basin_dir/'streamflow_DLB.yaml').is_file())
-                    self.assertFalse((basin_dir/'streamflow_ALL.yaml').exists())
-                    for name in ('streamflow_spinup.yaml','inundation_spinup.yaml',
-                                 'streamflow_ctl.yaml','inundation_ctl.yaml'):
-                        self.assertTrue((basin_dir/name).is_file())
-                    self.assertIn('years: [1996, 1999]',
-                                  (basin_dir/'streamflow_spinup.yaml').read_text())
-                    self.assertIn('enabled: false',
-                                  (basin_dir/'streamflow_ctl.yaml').read_text())
+                    for kind in ('streamflow','inundation_fraction','inundation_area'):
+                        self.assertTrue((basin_dir/f'{kind}_DLB.yaml').is_file())
+                        self.assertFalse((basin_dir/f'{kind}_ALL.yaml').exists())
+                        spinup=yaml.safe_load((basin_dir/f'{kind}_spinup.yaml').read_text())
+                        ctl=yaml.safe_load((basin_dir/f'{kind}_ctl.yaml').read_text())
+                        self.assertEqual(spinup['project']['years'],[1996,1999])
+                        self.assertFalse(ctl['comparison']['enabled'])
                 self.assertEqual(list(cases.iterdir()),[],'create must not create cases')
                 self.assertNotIn(str(exp.parent/f'.EXP{index}_smoke_{region}'),
                                  (exp/'config/colm/run_manifest.json').read_text())
@@ -261,7 +256,7 @@ class ExperimentTemplateTests(unittest.TestCase):
                 resolution='0p5' if region=='Global' else '0p1'
                 self.assertIn(f'NML={exp}/config/colm/{exp.name}_D_INIT_{resolution}.nml',dam)
                 self.assertIn(f'MARKER={exp}/config/jobs/markers/D_INIT.success',dam)
-                self.assertNotIn('BASH_SOURCE',dam)
+                self.assertIn('SCRIPT_DIR=',dam)
                 self.assertIn('STEPS colm',formal)
                 self.assertNotIn('mkinidata.x',formal)
                 helper=(exp/'config/jobs/submit_batch.sh').read_text()
@@ -333,8 +328,8 @@ class ExperimentTemplateTests(unittest.TestCase):
                 '--eval-start-year','2002','--eval-end-year','2004','--overwrite')
             self.assertEqual(tree_hash(target/'config/colm'),colm_before)
             self.assertEqual(tree_hash(target/'config/jobs'),jobs_before)
-            self.assertIn('years: [2002, 2004]',
-                          (target/'config/openbench/mekong/streamflow_D.yaml').read_text())
+            self.assertEqual(yaml.safe_load(
+                (target/'config/openbench/mekong/streamflow_D.yaml').read_text())['project']['years'],[2002,2004])
             backups=target/'provenance/backups'
             self.assertTrue(any((path/'openbench').is_dir() for path in backups.iterdir()))
             run(str(TOOLS/'dlb_02_generate_namelists.py'),
@@ -448,7 +443,9 @@ class ExperimentTemplateTests(unittest.TestCase):
             self.assertEqual(manifest['regions']['SA']['land_resolution_degrees'],0.1)
             self.assertTrue(manifest['regions']['SA']['routing_grid'].endswith('06min.nc'))
             for file in exp.rglob('*'):
-                if file.is_file():self.assertNotIn('/share/home/',file.read_text())
+                # Tool and interpreter locations are allowed; site data paths must come from the fixture.
+                if file.is_file():
+                    self.assertNotIn('/share/home/',file.read_text().replace(str(TOOLS),'').replace(str(PYTHON),''))
             jobs=exp/'config/jobs'
             self.assertEqual(len(list(jobs.glob('*.slurm'))),10)
             for file in [*jobs.glob('*.slurm'),jobs/'submit_batch.sh']:
@@ -583,7 +580,7 @@ class ExperimentTemplateTests(unittest.TestCase):
                 '--node','tms13','--cores','72','--tasks-per-node','72','--draft')
             colm_path=target/'config/colm/run_manifest.json'
             before=json.loads(colm_path.read_text())
-            self.assertEqual(len(list((target/'config/openbench').rglob('*.yaml'))),18)
+            self.assertEqual(len(list((target/'config/openbench').rglob('*.yaml'))),30)
             self.assertIn('OpenBench_Streamflow_Daily',
                           (target/'config/openbench/mekong/streamflow_DLB.yaml').read_text())
             # Later changes or removal of the external profile must not alter an existing study.
@@ -596,7 +593,7 @@ class ExperimentTemplateTests(unittest.TestCase):
             self.assertEqual(after['base_template'],before['base_template'])
             self.assertEqual(tree_hash(target/'config/openbench'),openbench_before)
             spin=(target/'config/jobs/submit_SPINUP.slurm').read_text()
-            for value in ('--ntasks=72','--exclusive','--nodelist=tms13','mpirun -np 72','NML="$SCRIPT_DIR"/'):
+            for value in ('--ntasks=72','--exclusive','--nodelist=tms13','mpirun -np 72',f'NML={target}/config/colm/'):
                 self.assertIn(value,spin)
             job_meta=json.loads((target/'config/jobs/site_config.json').read_text())
             self.assertEqual(job_meta['path'],str(profile))

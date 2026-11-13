@@ -190,7 +190,7 @@ bash "$EXP_DIR/config/jobs/submit_batch.sh" --dry-run --stage spinup
 本机基础模板 `templates/dlb_base.nml` 明确设置 `DEF_TRACER_NUM = 0`。
 保留原有区域边界、网格、1996–1999 spinup、2000–2005 模拟及评估规则：
 USA/SA/Mekong 使用 06min routing，Global 使用 15min，参考 Amazon 文件不会将其统一改成 0.25° 泥沙实验。
-OpenBench 独立生成器为 USA 生成 36 份 YAML，其他区域各 18 份，包含成对比较和 spinup、CTL 单独评估，
+OpenBench 独立生成器为 USA 生成 60 份 YAML，其他区域各 30 份，包含成对比较、八组实验汇总比较和 spinup、CTL 单独评估，
 径流参考源为 `OpenBench_Streamflow_Daily`。
 
 ## 1. 通用入口与旧服务器默认值
@@ -708,18 +708,87 @@ success marker 必须全部存在。配置与科学约束检查仍由生成、�
 
 ## 12. OpenBench
 
-处理组 YAML 比较 E0_CTL 与一个处理组，其中 DLB 组使用
-`streamflow_DLB.yaml` 和 `inundation_DLB.yaml`。每个流域还生成 spinup
-和 ctl 的单实验评估配置：
+配置由 `templates/openbench/` 中的变量 YAML 模板与实验 `manifest.yaml`、
+`config/colm/run_manifest.json` 结构化合并生成，需要使用安装了 PyYAML 的 Python
+环境（可使用 OpenBench 的虚拟环境），并使用支持 `project.basin_mask` 的 OpenBench
+版本。Python 不再保存各变量的指标、评分列表，
+也不再把两个淹没变量放进同一个 YAML；科学评估规则和指标公式保持不变。
+
+| 模板 | 变量 | 参考数据 | 时间分辨率 |
+| --- | --- | --- | --- |
+| `streamflow.yaml` | Streamflow | OpenBench_Streamflow_Daily | Day |
+| `inundation_fraction.yaml` | Inundation_Fraction | GIEMS_v2_LowRes | Month |
+| `inundation_area.yaml` | Inundation_Area | GIEMS_v2_LowRes | Month |
+
+每份 YAML 仅评估一个变量。处理组 `D、L、B、DL、DB、LB、DLB` 分别对应
+E1_D 至 E7_ALL，各自与 E0_CTL 成对比较。每个变量还生成 spinup 和 ctl
+单实验配置，例如：
 
 ```text
-streamflow_spinup.yaml  inundation_spinup.yaml
-streamflow_ctl.yaml     inundation_ctl.yaml
+config/openbench/mekong/
+    streamflow_D.yaml
+    inundation_fraction_D.yaml
+    inundation_area_D.yaml
+    ...
+    streamflow_spinup.yaml
+    inundation_fraction_spinup.yaml
+    inundation_area_spinup.yaml
+    streamflow_ctl.yaml
+    inundation_fraction_ctl.yaml
+    inundation_area_ctl.yaml
+    streamflow_comparisons.yaml
+    inundation_fraction_comparisons.yaml
+    inundation_area_comparisons.yaml
 ```
 
-spinup 评估年份为其运行期 1996–1999；ctl 使用创建实验时指定的评估年份。
-径流使用 `OpenBench_Streamflow_Daily`，淹没使用 `GIEMS_v2_LowRes`。USA 共生成 36 份
-YAML，SA、Mekong 和 Global 各生成 18 份。
+spinup 使用 1996–1999，其他配置使用实验指定的评估年份。数量动态计算为
+“流域数 × 模板数 × 10 组”：三个模板时 USA 两个流域共 60 份，SA、Mekong、Global
+各 30 份。manifest 项目清单同步更新，记录唯一的项目名、配置文件和实际结果目录。
+
+`*_comparisons.yaml` 是每变量的独立八组比较项目，按 E0_CTL、E1_D、E2_L、E3_B、
+E4_DL、E5_DB、E6_LB、E7_ALL 顺序包含全部正式实验，不包含 spinup。
+项目名以 `_comparisons` 结尾，manifest 的 `treatment` 为 `comparisons`，
+结果写入独立的 `openbench_output/<project>`。它使用该变量模板的 reference、
+时间分辨率、metrics、scores、statistics 和 comparison.items。
+
+默认 Taylor_Diagram、HeatMap 比较八组模拟；Diff_Plot 沿用 OpenBench 的原生行为，
+覆盖八组模拟的 28 个两两组合，实际图数还取决于指标、评分及数据。
+该项目由 OpenBench 正常评估后出图，可能重复部分成对项目的评估工作；
+它不会自动从已有成对项目目录拼接结果，也不默认使用 `--comparison-only`。
+
+新增 OpenBench 已支持的变量时，在 `templates/openbench/` 新增一个 `.yaml`
+文件，或复制现有模板并修改以下字段，无需给生成器增加变量分支：
+
+```yaml
+project:
+  tim_res: Month
+evaluation:
+  variables: [Evapotranspiration]
+reference:
+  Evapotranspiration: GLEAM_v4.2a_LowRes
+metrics: [RMSE, correlation]
+scores: [Overall_Score]
+comparison:
+  items: [Taylor_Diagram, HeatMap, Diff_Plot]
+statistics:
+  enabled: false
+  items: []
+```
+
+文件名（如 `evapotranspiration.yaml`）决定输出文件和项目名的变量前缀。
+每个模板必须只定义一个变量，`reference` 必须对应该变量；模板文件名前缀和变量名
+均不得重复。缺失字段、YAML 解析失败、重复字段/变量、输出命名冲突会明确报错。
+使用标准 YAML，不使用 Jinja2 或 `!include`；生成结果完整独立，运行时无需模板。
+可用 `--template-dir /path/to/templates` 选择另一套模板。
+
+修改某变量的 `metrics`、`scores`、`reference`、`project.tim_res`、
+`comparison.items` 或 `statistics` 时，直接编辑对应模板。
+生成器填入项目名、输出根目录、年份、BASINS 区域/掩膜和网格、模拟 history 路径；
+成对比较和八组汇总比较启用 `comparison`，单实验关闭比较并清空比较项。
+CoLM2024、日数据、按月分组和 `_hist_unitcat_` 文件前缀规则保持不变；变量名映射、
+单位和时间偏移继续由 OpenBench 的 CoLM2024 profile 负责。
+指标适用性、Reference Registry、数据扫描、配置/数据检查、缓存和断点续跑也均由
+OpenBench 提供，DLB 只保留非交互式配置生成和既有提交入口。
 
 检查单个配置：
 
@@ -733,7 +802,8 @@ openbench check "$EXP_DIR/config/openbench/mekong/streamflow_D.yaml"
 openbench run "$EXP_DIR/config/openbench/mekong/streamflow_D.yaml"
 ```
 
-OpenBench 输出路径已经写入 YAML，统一位于实验目录的 `openbench_output/`。
+OpenBench 在 YAML 的 `project.output_dir` 下追加 `project.name`，实际结果目录为
+`openbench_output/<project>`；不要把项目名再次写入 YAML 的输出根目录。
 
 批量生成 LSF 独占节点作业时，每个选项直接对应一套实验：`-D`、`-L`、
 `-B` 分别选择 E1_D、E2_L、E3_B，`-DL`、`-DB`、`-LB`、`-DLB`
@@ -755,7 +825,8 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
   --submit
 ```
 
-`--submit` 会直接复用前一次 dry-run 生成的作业快照。只有需要修改 queue、cores、
+`--submit` 只会复用与当前选中项目、YAML SHA256、待运行列表一致且文件未变的作业快照。
+旧格式或过期快照会被拒绝，须使用 `--overwrite` 重新生成。只有需要修改 queue、cores、
 slots、memory、walltime、并发数或 OpenBench 路径并重新生成作业时，才使用
 `--overwrite --submit`；`--overwrite` 始终只替换作业清单和 LSF 脚本。
 
@@ -763,9 +834,70 @@ slots、memory、walltime、并发数或 OpenBench 路径并重新生成作业�
 节点不需要再次激活虚拟环境。如果不使用 `source` 激活环境，也可以显式传入
 `--openbench-exe /path/to/openbench`。
 
-使用 `--all` 选择 manifest 中的全部 OpenBench 项目。未指定实验选择时脚本会
+对当前实验目录的**所有 OpenBench 项目**使用 `--all`（不是扫描其他实验目录）：
+它选择 manifest 中全部流域、全部变量的成对比较、spinup、ctl 和八组汇总比较项目。
+三个模板时单流域共选择 30 个项目，USA 共 60 个；实际提交数量取决于任务状态，
+成功且配置未变、正在运行和未经确认的历史结果不会自动进入待运行列表。
+
+```bash
+# 设置工具目录和需要评估的实验目录，EXP_DIR 请替换为实际路径
+export DLB_ROOT=/share/home/dq134/wzx/DLB_experiments
+export EXP_DIR=/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_Mekong
+
+# 1. 首次 dry-run：生成全部 pending 项目的清单和 LSF 脚本，不提交
+# 先激活 OpenBench 环境；或增加 --openbench-exe /path/to/openbench
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all
+
+# 2. 修改 YAML、任务列表或资源后，重新生成作业快照并预览，不提交
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite \
+  --queue normal --cores 4 --slots-per-node 48 \
+  --memory 150G --walltime 24:00 --max-concurrent 20
+
+# 3. 核对预览后，正式提交与当前配置匹配的作业快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --submit
+
+# 4. 仅在人工检查、备份历史结果后，显式允许 unverified 项目重跑
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  --all --rerun-unverified --overwrite
+# 再核对清单，确认后提交；保留同一个显式重跑选项
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  --all --rerun-unverified --submit
+```
+
+以上步骤按需要选择执行，不必连续执行全部步骤。生成的文件位于
+`$EXP_DIR/config/openbench_jobs/`：`openbench_all_projects.tsv`、
+`submit_openbench_all_array.lsf` 和 `openbench_all_snapshot.json`。
+`--all` 不等于强制重算；`--overwrite` 只更新作业文件，不删除已有评估结果。
+
+通常只需两步：先 dry-run，核对清单后直接加 `--submit`；第二步不需要
+`--overwrite`。例如提交全部变量的八组比较项目：
+
+```bash
+# 第一步：生成并预览；若已有有效快照，直接复用，不改写文件
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons
+# 第二步：直接提交前一步的有效快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons --submit
+```
+
+相同配置可重复 dry-run；只有确实需要替换生成的作业文件时才使用 `--overwrite`，
+例如 YAML、待运行列表或资源配置发生变化后。过期快照仍会拒绝提交，避免运行旧配置。
+需要更换资源时可先用 `--overwrite` 重新预览，再直接加 `--submit` 提交。
+`STATE failed` 表示上次任务失败或中断、当前允许重试，不表示生成作业失败。
+
+只选择全部变量的八组比较项目，可使用以下命令（默认仅生成作业并预览）：
+
+```bash
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons
+# 同时选择 E1_D 成对比较和八组汇总比较
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --comparisons
+```
+
+`--comparisons` 在三个模板时每流域选择 3 个项目，USA 选择 6 个。
+旧实验需要先重新生成 YAML 和 manifest，才会有这些项目；仅更新代码不会改变旧实验。
+使用 `--all` 选择 manifest 中的全部 OpenBench 项目，包含八组汇总比较；
+`--all` 不能与 `--comparisons` 或其他实验选择项组合。未指定实验选择时脚本会
 停止，不会默认提交全部任务。每个 YAML 是一个 LSF array 元素，默认最多同时运行
-5 个，并使用 `span[hosts=1]` 将默认的 48 个 slots 放在同一节点。`normal` 队列
+20 个、每个评估使用 4 cores，并使用 `span[hosts=1]` 将默认的 48 个 slots 放在同一节点。`normal` 队列
 不接受 `-x`，所以这里不是 LSF 的绝对独占：只有当节点在 LSF 中总容量正好为
 48 slots 且不允许超配时，申请 48 slots 才会占满该节点，普通作业无法再进入。
 如果节点容量不同，应通过 `--slots-per-node` 指定实际值；管理员特权作业或不消耗
@@ -809,8 +941,106 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -DL --retry-failed --ov
 计算节点必须能读取脚本中记录的提交工具路径及 Python 解释器路径。
 
 如需重算成功或状态不明的项目，仍需先人工备份或移走对应输出目录，再使用普通模式。
+任务状态由 `dlb_openbench_state.py` 统一判定，提交入口和刷新脚本使用相同规则：
 
-修改 OpenBench 生成代码或评估年份后，可以单独覆盖 YAML，不会改动
+| 状态 | 判断依据 | 默认处理 |
+| --- | --- | --- |
+| `not_run` | 没有运行记录或结果 | pending |
+| `completed_unchanged` | 可信成功记录与当前 YAML SHA256 一致 | 跳过，manifest status 为 success |
+| `config_changed` | 有成功记录，但 YAML SHA256 已变化 | pending |
+| `failed` | 最近一次可信记录失败，或 running 记录已无锁持有者 | pending，保留部分结果 |
+| `running` | 项目执行锁被持有 | 跳过重复任务 |
+| `unverified` | 存在旧结果，但无有效可信记录（含损坏的记录） | 阻止自动运行并提示 |
+
+运行记录位于 `openbench_output/<project>/.dlb_openbench_run.json`，含项目、配置路径、
+本次 YAML 的 SHA256、状态和时间；只有 `check`、`run` 均返回 0，且结束时配置
+仍一致，才原子写入 success 记录。此记录只用于 DLB 任务识别，不是 OpenBench 缓存。
+旧 `.openbench_success`、`success.marker` 和 manifest 中的历史 success 不会被提升为
+可信成功。旧记录路径与当前配置路径不符也视为 unverified。
+
+**结果目录没有单独的 success/failed 文件是正常的。** 当前执行器不再创建
+`.openbench_success`、`.openbench_failed` 或 `success.marker`，而是统一更新
+`.dlb_openbench_run.json`。该文件以 `.` 开头，普通 `ls` 不显示，需用 `ls -a`。
+
+```bash
+# PROJECT 替换为需要查看的完整项目名称
+PROJECT=EXP000_spinup_SA_amazon_inundation_area_D
+ls -la "$EXP_DIR/openbench_output/$PROJECT"
+python -m json.tool \
+  "$EXP_DIR/openbench_output/$PROJECT/.dlb_openbench_run.json"
+
+# 根据当前 YAML、运行记录和执行锁，刷新 manifest 中的状态
+python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR"
+```
+
+JSON 的 `status` 表示最近一次执行记录：`running` 为已开始、尚未登记结束，
+`success` 为 check/run 均成功且结束时配置未变，`failed` 为执行失败；
+成功时有 `success_at`，失败时有 `error`。时间字段采用 UTC（`+00:00`），
+北京时间需加 8 小时。记录中的 `running` 本身不能证明任务仍在运行：
+刷新时会结合文件锁判断，无锁的遗留 running 记录按中断失败处理。
+即使 JSON 写着 success，当前 YAML 已变化时，刷新也会将任务识别为 config_changed。
+
+`Job <作业号> is submitted` 只表示 LSF 接受了提交，不表示评估已开始或成功。
+尚在排队、或在执行器写入记录前就失败的任务，可能还没有新的运行记录。
+此时检查 LSF 状态及 `$EXP_DIR/logs/openbench/` 中对应作业号和数组索引的
+`openbench_all.<作业号>.<索引>.out`、`.err`（其他选择器使用相应的文件名前缀）。
+旧结果和旧 marker 会保留，但不会自动成为当前配置的可信成功记录。
+
+作业启动时重新校验 mapping 和 YAML 的 SHA256；排队期间修改 YAML 或覆盖了
+mapping，旧任务会拒绝执行，提示重新生成作业。运行过程中检测到配置变化会记录
+failed，不能登记为当前配置成功。每项目在输出根目录的 `.dlb_openbench_locks/`
+持有 `flock` 锁，避免不同选择器或不同作业重复运行；锁由操作系统在退出时释放，
+运行记录无锁但仍为 running 时按中断失败重试，不需要人工删除锁文件。
+计算节点必须能访问生成作业时的 Python 环境、DLB 执行器和支持跨节点 flock 的共享文件系统。
+
+对于 unverified 的旧结果，先人工检查并自行备份，再显式允许重跑（不会删除已有文件）：
+
+```bash
+# dry-run：明确授权运行在历史结果目录上，仍由 OpenBench 自身管理增量缓存
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --rerun-unverified --overwrite
+# 核对清单后再提交，授权选项必须与快照一致
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --rerun-unverified --submit
+```
+
+如果执行 `--all --overwrite` 后看到以下输出，表示全部项目被历史结果保护阻止，
+不是 `--overwrite` 报错：
+
+```text
+STATE unverified: ...
+BLOCK unverified: use --rerun-unverified after reviewing/backing up results
+Selection all: selected=18 pending=0 skipped=18
+No jobs to generate or submit.
+```
+
+`--overwrite` 只允许替换作业文件，不能代替 `--rerun-unverified` 的显式重跑授权。
+如果仍显示 18 个项目、使用合并的 `inundation_*.yaml`，说明该单流域实验仍使用
+旧版配置和 manifest；当前三个变量模板加八组汇总比较应为每流域 30 个项目。
+另外检查 YAML 的 `project.output_dir`：应为实验的 `openbench_output` 根目录，
+不要包含项目名，否则 OpenBench 再追加项目名后会出现
+`openbench_output/<project>/<project>`。更正路径不会搬移或删除原目录中的结果。
+
+准备将旧实验迁移到当前模板并重新评估时，先确认 `EXP_DIR`、人工检查和备份旧结果，
+再按以下步骤操作（使用已安装 PyYAML 和 OpenBench 的 Python 环境）：
+
+```bash
+# 1. 更新实验 YAML 和 manifest；原配置自动备份，不删除旧评估结果
+# 这一步仅在需要迁移旧配置时执行；已手动定制的 YAML 应先备份，避免定制被模板替换
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite
+
+# 2. 显式允许历史结果重跑，重新生成全部 pending 项目的作业，只预览、不提交
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  --all --rerun-unverified --overwrite
+
+# 3. 核对项目数量、输出路径及清单后，再正式提交同一份快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  --all --rerun-unverified --submit
+```
+
+若不需要迁移模板、现有 YAML 的输出路径也正确，可直接从第 2 步开始。
+`--rerun-unverified` 不会强制重跑 `completed_unchanged` 或 `running` 项目，
+也不会默认向 OpenBench 添加 `--force`。
+
+修改变量模板或评估年份后，可以单独重新生成 YAML，不会改动
 CoLM namelist、jobs、case 或已有 OpenBench 输出：
 
 ```bash
@@ -822,6 +1052,30 @@ python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
 
 旧 YAML 和覆盖前的 manifest 会备份到 `provenance/backups/<UTC时间>/`。
 不加 `--overwrite` 时，如果 `config/openbench/` 已有配置，命令会安全停止。
+先在临时目录生成全部 YAML、检查命名冲突，再原子替换配置目录和 manifest；
+替换失败会恢复原配置。旧版合并的 `inundation_*.yaml` 会随旧配置目录一起备份，
+新版使用 `inundation_fraction_*.yaml` 和 `inundation_area_*.yaml`。
+
+**重新生成 YAML 不代表已有结果已按新配置重新评估。** 有可信成功记录且配置变化
+的项目现在会进入 pending；失败任务也允许重试，均不清理已有结果。
+修改模板后先重生成 YAML，或直接修改实验 YAML，然后重生成作业快照：
+
+```bash
+# 只生成清单和作业，预览待运行状态；不提交
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite
+# 核对之后才正式提交（只有 --submit 调用 bsub）
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --submit
+```
+
+`--overwrite` 只替换 mapping、LSF 脚本和快照元数据，不删除科学评估结果。
+资源参数仍由已验证的快照决定；需要更改资源时重新生成。所有新执行仍正常调用
+`openbench check` 和 `openbench run`，不默认附加 `--force`，复用 OpenBench 增量机制。
+需要强制重算或特殊续跑时，人工备份后直接使用 OpenBench 的 `--force`、`--resume`
+（以所用版本帮助为准）；直接运行 OpenBench 不会创建 DLB 可信运行记录。
+
+SHA256 针对生成后 YAML 的原始字节，因此注释/排版变更也会触发 config_changed。
+它不跟踪外部数据、Registry、模型 profile 或 OpenBench 软件版本变化；这些变化
+是否需要重算由 OpenBench 自身机制及用户判断。没有实现第二套评估缓存。
 
 ## 13. 刷新实验记录
 
@@ -838,12 +1092,17 @@ python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR" \
   --jobs-dir "$EXP_DIR/config/jobs_slurm"
 ```
 
-登记一个 OpenBench 项目成功：
+核实已有可信成功记录后，手动登记一个 OpenBench 项目成功：
 
 ```bash
 python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR" \
   --openbench-result EXP002_control_Mekong_mekong_streamflow_D=success
 ```
+
+人工 `success` 只有在成功记录与当前 YAML 一致时才接受；不能用于确认旧 marker。
+`failed`、`missing` 可降低本次刷新报告状态，另保留 `manual_status` 注记，
+不伪造运行记录。后续刷新仍重新检查运行证据。所有项目都具备匹配成功记录才可能
+进入 `openbench_complete`；每项目的 `task_state` 和汇总计数区分六种状态。
 
 状态可为：
 
@@ -856,7 +1115,7 @@ success  failed  missing
 ```bash
 python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR" \
   --openbench-result EXP002_control_Mekong_mekong_streamflow_D=success \
-  --openbench-result EXP002_control_Mekong_mekong_inundation_D=failed
+  --openbench-result EXP002_control_Mekong_mekong_inundation_fraction_D=failed
 ```
 
 所有自动检查通过后标记最终验证完成：

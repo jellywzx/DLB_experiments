@@ -15,6 +15,8 @@ import uuid
 from datetime import datetime,timezone
 from pathlib import Path
 
+from dlb_openbench_state import output_dir,task_state,sha256,atomic_json
+
 
 SELECTIONS=(
     ('D','E1_D','select_d'),('L','E2_L','select_l'),('B','E3_B','select_b'),
@@ -176,29 +178,33 @@ def main()->int:
     p.add_argument('-DB',dest='select_db',action='store_true',help='Select E5_DB')
     p.add_argument('-LB',dest='select_lb',action='store_true',help='Select E6_LB')
     p.add_argument('-DLB',dest='select_dlb',action='store_true',help='Select E7_ALL')
+    p.add_argument('--comparisons',action='store_true',help='Select eight-experiment comparison projects')
     p.add_argument('--all',dest='all_projects',action='store_true',help='Select every OpenBench project')
     p.add_argument('--retry-failed',action='store_true',
                    help='Retry only confirmed failed outputs; archive old results at task startup')
     p.add_argument('--openbench-exe',type=Path,
                    help='OpenBench executable; default: openbench from the current PATH')
     p.add_argument('--queue',default='normal')
-    p.add_argument('--cores',type=int,default=2)
+    p.add_argument('--cores',type=int,default=4)
     p.add_argument('--slots-per-node',type=int,default=48,
                    help='LSF slots reserved on one host; full-node only when this equals its capacity (default: 48)')
     p.add_argument('--memory',default='150G')
     p.add_argument('--walltime',default='24:00')
-    p.add_argument('--max-concurrent',type=int,default=5,
-                   help='Maximum simultaneous array tasks (default: 5)')
+    p.add_argument('--max-concurrent',type=int,default=20,
+                   help='Maximum simultaneous array tasks (default: 20)')
     p.add_argument('--out-dir',type=Path,help='Default: EXP_DIR/config/openbench_jobs')
     p.add_argument('--log-dir',type=Path,help='Default: EXP_DIR/logs/openbench')
     p.add_argument('--overwrite',action='store_true',help='Replace generated mapping/job files only')
+    p.add_argument('--rerun-unverified',action='store_true',
+                   help='Explicitly permit running over historical results without trusted records; never delete them')
     p.add_argument('--submit',action='store_true',help='Submit with bsub; default is dry-run')
     args=p.parse_args()
 
     requested=[(short,treatment) for short,treatment,dest in SELECTIONS if getattr(args,dest)]
+    if args.comparisons:requested.append(('comparisons','comparisons'))
     if args.all_projects and requested:p.error('--all cannot be combined with experiment selectors')
     if not args.all_projects and not requested:
-        p.error('select --all or at least one of -D/-L/-B/-DL/-DB/-LB/-DLB')
+        p.error('select --all, --comparisons or at least one of -D/-L/-B/-DL/-DB/-LB/-DLB')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.queue):p.error('invalid --queue')
     if not 1<=args.cores<=100000:p.error('--cores must be >= 1')
     if not 1<=args.slots_per_node<=100000:p.error('--slots-per-node must be >= 1')
@@ -220,7 +226,7 @@ def main()->int:
     if not selected:raise ValueError(f'no OpenBench projects selected for {label}')
     if args.retry_failed:label+='_retry_failed'
 
-    config_root=(root/'config/openbench').resolve();seen_projects=set();seen_configs=set();pending=[];skipped=[]
+    config_root=(root/'config/openbench').resolve();seen_projects=set();seen_configs=set();pending=[];skipped=[];selection=[]
     for item in selected:
         project=safe_field(item.get('project'),'project')
         if not re.fullmatch(r'[A-Za-z0-9_.-]+',project):raise ValueError(f'unsafe project name: {project!r}')
@@ -264,10 +270,13 @@ def main()->int:
     if existing and not args.overwrite:
         if not mapping.is_file() or not job.is_file():
             raise ValueError(f'incomplete generated job files for {label}; use --overwrite')
-        if not args.submit:
-            raise ValueError(f'generated job files already exist for {label}; use --submit or --overwrite')
+        try:saved=json.loads(snapshot.read_text())
+        except (OSError,ValueError):raise ValueError('missing/invalid job snapshot; use --overwrite')
+        if (any(saved.get(k)!=v for k,v in expected.items()) or saved.get('mapping_sha256')!=sha256(mapping)
+            or saved.get('job_sha256')!=sha256(job)):
+            raise ValueError('stale job snapshot; regenerate with --overwrite')
         print(f'Reusing generated job snapshot: {job}')
-        print('Resource options are read from that snapshot; use --overwrite --submit to regenerate it.')
+        print('Resource options are read from that snapshot. Use --overwrite only to replace generated job files.')
     else:
         detected=args.openbench_exe or shutil.which('openbench')
         if not detected:
@@ -288,6 +297,7 @@ def main()->int:
                                     args.cores,args.slots_per_node,args.memory,args.walltime,
                                     args.max_concurrent,retry=args.retry_failed))
         job.chmod(0o755)
+        atomic_json(snapshot,{**expected,'mapping_sha256':sha256(mapping),'job_sha256':sha256(job)})
         print(f'Generated {len(pending)} jobs: {job}')
     if not args.submit:
         print(f'DRY-RUN: bsub < {job}')

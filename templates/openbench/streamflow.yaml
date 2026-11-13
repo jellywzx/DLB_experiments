@@ -1,0 +1,21 @@
+project:
+  tim_res: Day
+evaluation:
+  variables: [Streamflow]
+reference:
+  Streamflow: OpenBench_Streamflow_Daily
+metrics:
+  - RMSE
+  - correlation
+  - percent_bias
+  - NSE
+  - KGE
+  - KGESS
+  - MFM
+scores:
+  - Overall_Score
+comparison:
+  items: [Taylor_Diagram, HeatMap, Diff_Plot]
+statistics:
+  enabled: false
+  items: []

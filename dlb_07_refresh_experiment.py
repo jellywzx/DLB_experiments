@@ -10,6 +10,8 @@ import sys
 from datetime import datetime,timezone
 from pathlib import Path
 
+from dlb_openbench_state import output_dir,task_state,STATES
+
 
 def sha256(path:Path)->str:
     h=hashlib.sha256()
@@ -42,10 +44,15 @@ def main()->int:
     unknown=set(updates)-known
     if unknown:raise ValueError('unknown OpenBench projects: '+', '.join(sorted(unknown)))
     for project in manifest['evaluation']['projects']:
-        name=project['project'];output=root/'openbench_output'/name
-        if name in updates:project['status']=updates[name]
-        elif (output/'.openbench_success').is_file() or (output/'success.marker').is_file():project['status']='success'
-        elif (output/'.openbench_failed').is_file() or (output/'failed.marker').is_file():project['status']='failed'
+        name=project['project'];config=root/project['config']
+        state=task_state(name,config,output_dir(config)/name)
+        if updates.get(name)=='success' and state!='completed_unchanged':
+            raise ValueError(f'cannot mark success without matching successful run record: {name} ({state})')
+        project['task_state']=state
+        project['status']='success' if state=='completed_unchanged' else state
+        if name in updates:
+            project['manual_status']=updates[name]
+            if updates[name]!='success':project['status']=updates[name]
 
     status_cmd=[sys.executable,str(Path(__file__).resolve().parent/'dlb_06_stage_status.py'),
                 '--nml-dir',str(root/'config/colm'),'--json']
@@ -86,7 +93,8 @@ def main()->int:
     manifest['refreshed_at']=datetime.now(timezone.utc).isoformat()
     manifest['stage_evidence']={k:stages[k] for k in ('spinup_complete','dam_init_complete','handoff_complete','colm_complete')}
     manifest['evaluation']['summary']={'success':statuses.count('success'),'failed':statuses.count('failed'),
-                                       'missing':statuses.count('missing'),'expected':len(statuses)}
+                                       'missing':statuses.count('not_run')+statuses.count('missing'),'expected':len(statuses),
+                                       **{state:sum(p.get('task_state')==state for p in manifest['evaluation']['projects']) for state in STATES}}
     manifest_path.write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
 
     artifact_files=[root/'README.md',root/'manifest.yaml',root/'config/colm/run_manifest.json',*configs,*jobs]
@@ -104,7 +112,7 @@ def main()->int:
     report=['PASS' if automatic_ok else 'INCOMPLETE',f'status: {status}',
         f'spinup_complete: {stages["spinup_complete"]}',f'dam_init_complete: {stages["dam_init_complete"]}',
         f'handoff_complete: {stages["handoff_complete"]}',f'colm_complete: {stages["colm_complete"]}',
-        f'openbench: success={statuses.count("success")} failed={statuses.count("failed")} missing={statuses.count("missing")}',
+        f'openbench: success={statuses.count("success")} failed={statuses.count("failed")} not_run={statuses.count("not_run")}',
         f'openbench_yaml: {len(configs)}/{expected}',*('ERROR: '+x for x in config_errors)]
     (root/'validation_report.txt').write_text('\n'.join(report)+'\n',encoding='utf-8')
     print(f'{manifest["name"]}: {status}')
