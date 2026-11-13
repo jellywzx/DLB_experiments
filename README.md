@@ -903,6 +903,44 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --comparisons
 如果节点容量不同，应通过 `--slots-per-node` 指定实际值；管理员特权作业或不消耗
 这些 slots 的特殊任务仍可能共享节点。节点不足时由 LSF 排队。
 
+普通模式会自动跳过已有非空输出目录的项目，不覆盖成功、失败或部分结果。这个检查
+会在生成任务清单和作业真正启动时各执行一次，以覆盖排队期间结果发生变化的情况。
+重跑失败项目时使用 `--retry-failed`，可与 `--all` 或 `-D`、`-DL` 等选择器组合：
+
+```bash
+# 仅筛选失败项目，生成重试快照并预览；不移动已有结果、不提交任务
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --retry-failed
+
+# 确认后提交预览时生成的快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --retry-failed --submit
+
+# 后续另一轮重试，或需要调整资源时，重新生成快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -DL --retry-failed --overwrite
+```
+
+失败依据为输出目录内的 `.openbench_failed`、`failed.marker`，或者 `run.log`
+最终摘要 `All phases complete: ... N errors`（N > 0）；没有最终摘要时，也识别
+`Evaluation phase: ... N failed`（N > 0）。日志中的普通 ERROR、WARNING 不单独作为
+重试依据。旧脚本可能在 OpenBench 内部失败但退出码为 0 时写入成功标记，因此明确的
+失败摘要优先于成功标记；新版生成的普通作业和重试作业均检查这一情况。
+
+有 `.dlb_openbench_running` 的项目总是跳过；成功、状态不明、其他标记冲突、符号链接
+输出目录也跳过。manifest 状态仅用于显示，单凭 manifest 的 failed 不会触发重试。
+残留 running 标记需在人工确认任务已停止后处理，脚本不自动判断调度器任务是否存活。
+
+每个重试任务实际启动后会获取项目级锁，并再次核对失败状态与快照中的目录身份。
+确认可重试后，将原输出目录完整移动到其同级目录
+`.dlb_openbench_backups/<project>.<UTC时间>.<唯一标识>/`，再创建干净输出目录，依次运行
+`openbench check` 和 `openbench run`。不会复用旧 NaN 预处理文件，也不删除原结果；
+没有足够权限完成备份时任务失败停止。任务中断后可能留下 running 标记供人工核查。
+
+重试的 LSF 脚本、日志和清单使用 `_retry_failed` 名称，与第一轮普通作业分开。
+每次生成的重试 mapping 路径均唯一，`--overwrite` 不修改已生成的旧 mapping，避免
+排队中的作业读取新清单。重复执行同一快照不会再次重跑已替换输出目录的项目；
+对再次失败的项目需用 `--overwrite` 生成新快照。不要删除仍被排队作业引用的清单。
+计算节点必须能读取脚本中记录的提交工具路径及 Python 解释器路径。
+
+如需重算成功或状态不明的项目，仍需先人工备份或移走对应输出目录，再使用普通模式。
 任务状态由 `dlb_openbench_state.py` 统一判定，提交入口和刷新脚本使用相同规则：
 
 | 状态 | 判断依据 | 默认处理 |
