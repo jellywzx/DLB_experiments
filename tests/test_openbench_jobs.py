@@ -200,6 +200,17 @@ class OpenBenchJobTests(unittest.TestCase):
             self.assertIn('Job <123>',result.stdout)
             self.assertIn('openbench_D[1-3]%20',capture.read_text())
 
+    def test_repeated_dry_run_reuses_snapshot_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable=fixture(root)
+            run(root,executable,'--comparisons')
+            folder=root/'config/openbench_jobs'
+            before={p.name:(p.read_bytes(),p.stat().st_mtime_ns) for p in folder.iterdir()}
+            result=run(root,executable,'--comparisons')
+            self.assertIn('Reusing generated job snapshot',result.stdout)
+            self.assertIn('DRY-RUN: bsub',result.stdout)
+            self.assertEqual(before,{p.name:(p.read_bytes(),p.stat().st_mtime_ns) for p in folder.iterdir()})
+
     def test_submit_after_dry_run_reuses_snapshot_without_overwrite(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);executable=fixture(root);run(root,executable,'-L','-B')

@@ -869,6 +869,21 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
 `submit_openbench_all_array.lsf` 和 `openbench_all_snapshot.json`。
 `--all` 不等于强制重算；`--overwrite` 只更新作业文件，不删除已有评估结果。
 
+通常只需两步：先 dry-run，核对清单后直接加 `--submit`；第二步不需要
+`--overwrite`。例如提交全部变量的八组比较项目：
+
+```bash
+# 第一步：生成并预览；若已有有效快照，直接复用，不改写文件
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons
+# 第二步：直接提交前一步的有效快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons --submit
+```
+
+相同配置可重复 dry-run；只有确实需要替换生成的作业文件时才使用 `--overwrite`，
+例如 YAML、待运行列表或资源配置发生变化后。过期快照仍会拒绝提交，避免运行旧配置。
+需要更换资源时可先用 `--overwrite` 重新预览，再直接加 `--submit` 提交。
+`STATE failed` 表示上次任务失败或中断、当前允许重试，不表示生成作业失败。
+
 只选择全部变量的八组比较项目，可使用以下命令（默认仅生成作业并预览）：
 
 ```bash
@@ -905,6 +920,34 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --comparisons
 旧 `.openbench_success`、`success.marker` 和 manifest 中的历史 success 不会被提升为
 可信成功。旧记录路径与当前配置路径不符也视为 unverified。
 
+**结果目录没有单独的 success/failed 文件是正常的。** 当前执行器不再创建
+`.openbench_success`、`.openbench_failed` 或 `success.marker`，而是统一更新
+`.dlb_openbench_run.json`。该文件以 `.` 开头，普通 `ls` 不显示，需用 `ls -a`。
+
+```bash
+# PROJECT 替换为需要查看的完整项目名称
+PROJECT=EXP000_spinup_SA_amazon_inundation_area_D
+ls -la "$EXP_DIR/openbench_output/$PROJECT"
+python -m json.tool \
+  "$EXP_DIR/openbench_output/$PROJECT/.dlb_openbench_run.json"
+
+# 根据当前 YAML、运行记录和执行锁，刷新 manifest 中的状态
+python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR"
+```
+
+JSON 的 `status` 表示最近一次执行记录：`running` 为已开始、尚未登记结束，
+`success` 为 check/run 均成功且结束时配置未变，`failed` 为执行失败；
+成功时有 `success_at`，失败时有 `error`。时间字段采用 UTC（`+00:00`），
+北京时间需加 8 小时。记录中的 `running` 本身不能证明任务仍在运行：
+刷新时会结合文件锁判断，无锁的遗留 running 记录按中断失败处理。
+即使 JSON 写着 success，当前 YAML 已变化时，刷新也会将任务识别为 config_changed。
+
+`Job <作业号> is submitted` 只表示 LSF 接受了提交，不表示评估已开始或成功。
+尚在排队、或在执行器写入记录前就失败的任务，可能还没有新的运行记录。
+此时检查 LSF 状态及 `$EXP_DIR/logs/openbench/` 中对应作业号和数组索引的
+`openbench_all.<作业号>.<索引>.out`、`.err`（其他选择器使用相应的文件名前缀）。
+旧结果和旧 marker 会保留，但不会自动成为当前配置的可信成功记录。
+
 作业启动时重新校验 mapping 和 YAML 的 SHA256；排队期间修改 YAML 或覆盖了
 mapping，旧任务会拒绝执行，提示重新生成作业。运行过程中检测到配置变化会记录
 failed，不能登记为当前配置成功。每项目在输出根目录的 `.dlb_openbench_locks/`
@@ -920,6 +963,44 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --rerun-unverified -
 # 核对清单后再提交，授权选项必须与快照一致
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --rerun-unverified --submit
 ```
+
+如果执行 `--all --overwrite` 后看到以下输出，表示全部项目被历史结果保护阻止，
+不是 `--overwrite` 报错：
+
+```text
+STATE unverified: ...
+BLOCK unverified: use --rerun-unverified after reviewing/backing up results
+Selection all: selected=18 pending=0 skipped=18
+No jobs to generate or submit.
+```
+
+`--overwrite` 只允许替换作业文件，不能代替 `--rerun-unverified` 的显式重跑授权。
+如果仍显示 18 个项目、使用合并的 `inundation_*.yaml`，说明该单流域实验仍使用
+旧版配置和 manifest；当前三个变量模板加八组汇总比较应为每流域 30 个项目。
+另外检查 YAML 的 `project.output_dir`：应为实验的 `openbench_output` 根目录，
+不要包含项目名，否则 OpenBench 再追加项目名后会出现
+`openbench_output/<project>/<project>`。更正路径不会搬移或删除原目录中的结果。
+
+准备将旧实验迁移到当前模板并重新评估时，先确认 `EXP_DIR`、人工检查和备份旧结果，
+再按以下步骤操作（使用已安装 PyYAML 和 OpenBench 的 Python 环境）：
+
+```bash
+# 1. 更新实验 YAML 和 manifest；原配置自动备份，不删除旧评估结果
+# 这一步仅在需要迁移旧配置时执行；已手动定制的 YAML 应先备份，避免定制被模板替换
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite
+
+# 2. 显式允许历史结果重跑，重新生成全部 pending 项目的作业，只预览、不提交
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  --all --rerun-unverified --overwrite
+
+# 3. 核对项目数量、输出路径及清单后，再正式提交同一份快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
+  --all --rerun-unverified --submit
+```
+
+若不需要迁移模板、现有 YAML 的输出路径也正确，可直接从第 2 步开始。
+`--rerun-unverified` 不会强制重跑 `completed_unchanged` 或 `running` 项目，
+也不会默认向 OpenBench 添加 `--force`。
 
 修改变量模板或评估年份后，可以单独重新生成 YAML，不会改动
 CoLM namelist、jobs、case 或已有 OpenBench 输出：

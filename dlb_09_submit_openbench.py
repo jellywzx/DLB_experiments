@@ -153,10 +153,8 @@ def main()->int:
         if (any(saved.get(k)!=v for k,v in expected.items()) or saved.get('mapping_sha256')!=sha256(mapping)
             or saved.get('job_sha256')!=sha256(job)):
             raise ValueError('stale job snapshot; regenerate with --overwrite')
-        if not args.submit:
-            raise ValueError(f'generated job files already exist for {label}; use --submit or --overwrite')
         print(f'Reusing generated job snapshot: {job}')
-        print('Resource options are read from that snapshot; use --overwrite --submit to regenerate it.')
+        print('Resource options are read from that snapshot. Use --overwrite only to replace generated job files.')
     else:
         detected=args.openbench_exe or shutil.which('openbench')
         if not detected:
