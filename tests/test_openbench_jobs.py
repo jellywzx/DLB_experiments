@@ -142,8 +142,8 @@ class OpenBenchJobTests(unittest.TestCase):
             calls=root/'calls.txt';env=os.environ.copy();env.update(LSB_JOBINDEX='1',OPENBENCH_CALLS=str(calls))
             job=root/'config/openbench_jobs/submit_openbench_B_array.lsf'
             result=subprocess.run(['bash',str(job)],text=True,capture_output=True,env=env)
-            self.assertEqual(result.returncode,0,result.stderr)
-            self.assertIn('SKIP existing result',result.stdout)
+            self.assertEqual(result.returncode,2,result.stderr)
+            self.assertIn('BLOCK unverified',result.stdout)
             self.assertFalse(calls.exists())
             self.assertEqual((output/'new.nc').read_bytes(),b'x')
 
@@ -212,8 +212,8 @@ class OpenBenchJobTests(unittest.TestCase):
             result=run(root,executable,'-L','-B','--cores','9','--submit',env=env)
             self.assertIn('Reusing generated job snapshot',result.stdout)
             self.assertEqual(job.read_text(),before)
-            self.assertIn('run "$CONFIG" --cores 4',capture.read_text())
-            self.assertNotIn('run "$CONFIG" --cores 9',capture.read_text())
+            self.assertIn('--cores 4',capture.read_text())
+            self.assertNotIn('--cores 9',capture.read_text())
 
 
 if __name__=='__main__':

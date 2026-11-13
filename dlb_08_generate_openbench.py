@@ -227,8 +227,8 @@ def main()->int:
     if has_existing:
         print(f'Previous OpenBench configuration backed up at {backup}')
         print('WARNING: Regenerating YAML does not re-evaluate existing results. '
-              'DLB jobs skip nonempty output directories; use OpenBench directly with '
-              '--force after backing up results when re-evaluation is required.',file=sys.stderr)
+              'DLB checks successful-run configuration hashes; legacy results require '
+              'explicit --rerun-unverified. OpenBench manages incremental execution.',file=sys.stderr)
     if not args.no_refresh:
         refresh=Path(__file__).resolve().parent/'dlb_07_refresh_experiment.py'
         result=subprocess.run([sys.executable,str(refresh),str(root)],text=True,

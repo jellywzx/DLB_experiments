@@ -248,7 +248,7 @@ class OpenBenchTemplateTests(unittest.TestCase):
                 rows=(root/f'config/openbench_jobs/openbench_{flag}_projects.tsv').read_text().splitlines()[1:]
                 self.assertEqual(len(rows),6)
                 for row in rows:
-                    _,project,config,output=row.split('\t')
+                    _,project,config,output,digest=row.split('\t')
                     self.assertTrue(project.endswith('_'+flag))
                     expected={'E0_CTL',*TREATMENTS.values()} if flag=='comparisons' else {'E0_CTL',treatment}
                     self.assertEqual(set(yaml.safe_load(Path(config).read_text())['simulation']),expected)

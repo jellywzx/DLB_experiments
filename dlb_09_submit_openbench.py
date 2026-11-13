@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dlb_openbench_state import output_dir,task_state,sha256,atomic_json
+
 
 SELECTIONS=(
     ('D','E1_D','select_d'),('L','E2_L','select_l'),('B','E3_B','select_b'),
@@ -21,21 +23,6 @@ SELECTIONS=(
 
 
 def sq(value:object)->str:return shlex.quote(str(value))
-
-
-def output_dir(config:Path)->Path:
-    for line in config.read_text(encoding='utf-8').splitlines():
-        if re.match(r'^\s{2}output_dir\s*:',line):
-            raw=line.split(':',1)[1].strip().strip('"\'')
-            if not raw:break
-            return Path(raw).expanduser().resolve()
-    raise ValueError(f'missing project.output_dir: {config}')
-
-
-def has_results(path:Path)->bool:
-    if not path.exists():return False
-    if not path.is_dir():return True
-    return next(path.iterdir(),None) is not None
 
 
 def safe_field(value:object,label:str)->str:
@@ -53,7 +40,7 @@ def write_atomic(path:Path,text:str)->None:
 
 def job_script(label:str,count:int,mapping:Path,openbench:Path,logs:Path,queue:str,
                cores:int,slots_per_node:int,memory:str,walltime:str,
-               max_concurrent:int|None)->str:
+               max_concurrent:int|None,mapping_hash:str,rerun_unverified:bool=False)->str:
     array=f'openbench_{label}[1-{count}]'+(f'%{max_concurrent}' if max_concurrent else '')
     lines=['#!/usr/bin/env bash',f'#BSUB -J "{array}"',
         f'#BSUB -q {queue}',f'#BSUB -n {slots_per_node}',f'#BSUB -W {walltime}',
@@ -63,35 +50,9 @@ def job_script(label:str,count:int,mapping:Path,openbench:Path,logs:Path,queue:s
         '#BSUB -env "all,LSB_STDOUT_DIRECT=Y"','',
         'set -euo pipefail',f'MAPPING={sq(mapping)}',f'OPENBENCH={sq(openbench)}',
         'INDEX=${LSB_JOBINDEX:?LSB_JOBINDEX is required}',
-        "ROW=$(awk -F '\\t' -v i=\"$INDEX\" '$1 == i {print; exit}' \"$MAPPING\")",
-        '[[ -n "$ROW" ]] || { echo "No mapping for index $INDEX" >&2; exit 2; }',
-        "IFS=$'\\t' read -r _ PROJECT CONFIG OUTPUT <<< \"$ROW\"",
-        '[[ -f "$CONFIG" ]] || { echo "Missing config: $CONFIG" >&2; exit 2; }',
-        '[[ -x "$OPENBENCH" ]] || { echo "OpenBench is not executable: $OPENBENCH" >&2; exit 2; }',
-        'if [[ -e "$OUTPUT" ]]; then',
-        '  if [[ ! -d "$OUTPUT" ]] || [[ -n "$(find "$OUTPUT" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then',
-        '    echo "SKIP existing result: $PROJECT -> $OUTPUT"',
-        '    exit 0',
-        '  fi',
-        'fi',
-        'mkdir -p "$OUTPUT"',
-        'RUNNING="$OUTPUT/.dlb_openbench_running"',
-        'FAILED="$OUTPUT/.openbench_failed"',
-        'SUCCESS="$OUTPUT/.openbench_success"',
-        'touch "$RUNNING"',
-        'rm -f "$FAILED"',
-        'echo "START $(date -Is) $(hostname) $PROJECT"',
-        'if "$OPENBENCH" check "$CONFIG" && "$OPENBENCH" run "$CONFIG" --cores '+str(cores)+'; then',
-        '  rm -f "$RUNNING" "$FAILED"',
-        '  touch "$SUCCESS"',
-        '  echo "FINISH $(date -Is) $PROJECT"',
-        'else',
-        '  status=$?',
-        '  rm -f "$RUNNING" "$SUCCESS"',
-        '  touch "$FAILED"',
-        '  echo "FAILED $(date -Is) $PROJECT status=$status" >&2',
-        '  exit "$status"',
-        'fi','']
+        f'exec {sq(sys.executable)} {sq(Path(__file__).resolve().with_name("dlb_openbench_state.py"))} '
+        f'--mapping "$MAPPING" --mapping-sha256 {sq(mapping_hash)} --index "$INDEX" '
+        f'--openbench "$OPENBENCH" --cores {cores}'+(' --rerun-unverified' if rerun_unverified else ''),'']
     return '\n'.join(lines)
 
 
@@ -120,6 +81,8 @@ def main()->int:
     p.add_argument('--out-dir',type=Path,help='Default: EXP_DIR/config/openbench_jobs')
     p.add_argument('--log-dir',type=Path,help='Default: EXP_DIR/logs/openbench')
     p.add_argument('--overwrite',action='store_true',help='Replace generated mapping/job files only')
+    p.add_argument('--rerun-unverified',action='store_true',
+                   help='Explicitly permit running over historical results without trusted records; never delete them')
     p.add_argument('--submit',action='store_true',help='Submit with bsub; default is dry-run')
     args=p.parse_args()
 
@@ -148,7 +111,7 @@ def main()->int:
         selected=[item for item in projects if item.get('treatment') in treatments]
     if not selected:raise ValueError(f'no OpenBench projects selected for {label}')
 
-    config_root=(root/'config/openbench').resolve();seen_projects=set();seen_configs=set();pending=[];skipped=[]
+    config_root=(root/'config/openbench').resolve();seen_projects=set();seen_configs=set();pending=[];skipped=[];selection=[]
     for item in selected:
         project=safe_field(item.get('project'),'project')
         if not re.fullmatch(r'[A-Za-z0-9_.-]+',project):raise ValueError(f'unsafe project name: {project!r}')
@@ -161,8 +124,13 @@ def main()->int:
         if not config.is_file():raise ValueError(f'missing OpenBench config: {config}')
         output=output_dir(config)/project
         safe_field(config,'config');safe_field(output,'output_dir')
-        if has_results(output):skipped.append((project,output))
-        else:pending.append((project,config,output))
+        digest=sha256(config);state=task_state(project,config,output)
+        selection.append([project,str(config),str(output),digest])
+        print(f'STATE {state}: {project}')
+        if state in ('completed_unchanged','running') or (state=='unverified' and not args.rerun_unverified):
+            skipped.append((project,output))
+            if state=='unverified':print('BLOCK unverified: use --rerun-unverified after reviewing/backing up results')
+        else:pending.append((project,config,output,digest))
 
     print(f'Selection {label}: selected={len(selected)} pending={len(pending)} skipped={len(skipped)}')
     for project,output in skipped:print(f'SKIP existing result: {project} -> {output}')
@@ -173,10 +141,18 @@ def main()->int:
     out_dir=(args.out_dir.expanduser().resolve() if args.out_dir else root/'config/openbench_jobs')
     log_dir=(args.log_dir.expanduser().resolve() if args.log_dir else root/'logs/openbench')
     mapping=out_dir/f'openbench_{label}_projects.tsv';job=out_dir/f'submit_openbench_{label}_array.lsf'
-    existing=mapping.exists() or job.exists()
+    snapshot=out_dir/f'openbench_{label}_snapshot.json'
+    expected={'selection':selection,'pending':[[str(x) for x in row] for row in pending],
+              'rerun_unverified':args.rerun_unverified}
+    existing=mapping.exists() or job.exists() or snapshot.exists()
     if existing and not args.overwrite:
         if not mapping.is_file() or not job.is_file():
             raise ValueError(f'incomplete generated job files for {label}; use --overwrite')
+        try:saved=json.loads(snapshot.read_text())
+        except (OSError,ValueError):raise ValueError('missing/invalid job snapshot; use --overwrite')
+        if (any(saved.get(k)!=v for k,v in expected.items()) or saved.get('mapping_sha256')!=sha256(mapping)
+            or saved.get('job_sha256')!=sha256(job)):
+            raise ValueError('stale job snapshot; regenerate with --overwrite')
         if not args.submit:
             raise ValueError(f'generated job files already exist for {label}; use --submit or --overwrite')
         print(f'Reusing generated job snapshot: {job}')
@@ -189,14 +165,15 @@ def main()->int:
         if not openbench.is_file() or not os.access(openbench,os.X_OK):
             raise ValueError(f'OpenBench is not executable: {openbench}')
         out_dir.mkdir(parents=True,exist_ok=True);log_dir.mkdir(parents=True,exist_ok=True)
-        rows=['index\tproject\tconfig\toutput_dir']
-        rows.extend(f'{i}\t{project}\t{config}\t{output}'
-                    for i,(project,config,output) in enumerate(pending,1))
+        rows=['index\tproject\tconfig\toutput_dir\tconfig_sha256']
+        rows.extend(f'{i}\t{project}\t{config}\t{output}\t{digest}'
+                    for i,(project,config,output,digest) in enumerate(pending,1))
         write_atomic(mapping,'\n'.join(rows)+'\n')
         write_atomic(job,job_script(label,len(pending),mapping,openbench,log_dir,args.queue,
                                     args.cores,args.slots_per_node,args.memory,args.walltime,
-                                    args.max_concurrent))
+                                    args.max_concurrent,sha256(mapping),args.rerun_unverified))
         job.chmod(0o755)
+        atomic_json(snapshot,{**expected,'mapping_sha256':sha256(mapping),'job_sha256':sha256(job)})
         print(f'Generated {len(pending)} jobs: {job}')
     if not args.submit:
         print(f'DRY-RUN: bsub < {job}')
