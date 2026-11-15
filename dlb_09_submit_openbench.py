@@ -238,6 +238,8 @@ def main()->int:
         seen_projects.add(project);seen_configs.add(config)
         if not config.is_file():raise ValueError(f'missing OpenBench config: {config}')
         output=output_dir(config)/project
+        selection.append({'project':project,'config':str(config),'output_dir':str(output),
+                          'config_sha256':sha256(config)})
         safe_field(config,'config');safe_field(output,'output_dir')
         if args.retry_failed:
             state=result_state(output)
@@ -266,6 +268,8 @@ def main()->int:
         mapping=Path(fields[0])
         if mapping.parent!=out_dir or not mapping.name.startswith(f'openbench_{label}_'):
             raise ValueError(f'retry mapping escapes snapshot directory: {mapping}')
+    snapshot=out_dir/f'openbench_{label}_snapshot.json'
+    expected={'selection':selection,'pending':[project for project,_,_ in pending]}
     existing=mapping.exists() or job.exists()
     if existing and not args.overwrite:
         if not mapping.is_file() or not job.is_file():
