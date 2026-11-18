@@ -72,8 +72,8 @@ class OpenBenchTemplateTests(unittest.TestCase):
             self.assertEqual(template['project']['tim_res'],'Month' if flood else 'Day')
             self.assertEqual(template['metrics'],(['bias'] if flood else [])+
                              ['RMSE','correlation','percent_bias','NSE','KGE','KGESS','MFM'])
-            self.assertEqual(template['scores'],['Overall_Score']+(['nBiasScore','nRMSEScore',
-                'nPhaseScore','nIavScore','nSpatialScore','nSeasonalityScore'] if flood else []))
+            self.assertEqual(template['scores'],['Overall_Score','nBiasScore','nRMSEScore',
+                'nPhaseScore','nIavScore','nSpatialScore','nSeasonalityScore'])
             self.assertEqual(template['comparison']['items'],['Taylor_Diagram','HeatMap','Diff_Plot'])
             self.assertEqual(template['statistics'],{'enabled':False,'items':[]})
 

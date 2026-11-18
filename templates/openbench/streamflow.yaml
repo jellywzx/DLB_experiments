@@ -14,6 +14,12 @@ metrics:
   - MFM
 scores:
   - Overall_Score
+  - nBiasScore
+  - nRMSEScore
+  - nPhaseScore
+  - nIavScore
+  - nSpatialScore
+  - nSeasonalityScore
 comparison:
   items: [Taylor_Diagram, HeatMap, Diff_Plot]
 statistics:
