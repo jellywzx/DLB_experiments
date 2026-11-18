@@ -135,7 +135,7 @@ class OpenBenchTemplateTests(unittest.TestCase):
                     self.assertEqual(config['comparison']['enabled'],comparison)
                     self.assertEqual(config['comparison']['items'],template['comparison']['items'] if comparison else [])
                     self.assertEqual(config['project']['years'],[1996,1999] if label=='spinup' else [2002,2004])
-                    expected=['E0_CTL',label] if paired else ['spinup' if label=='spinup' else 'E0_CTL']
+                    expected=[label,'E0_CTL'] if paired else ['spinup' if label=='spinup' else 'E0_CTL']
                     if label=='comparisons':expected=['E0_CTL',*TREATMENTS.values()]
                     self.assertEqual(list(config['simulation']),expected)
                     for run,simulation in config['simulation'].items():

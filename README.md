@@ -1051,7 +1051,7 @@ python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
 ```
 
 旧 YAML 和覆盖前的 manifest 会备份到 `provenance/backups/<UTC时间>/`。
-不加 `--overwrite` 时，如果 `config/openbench/` 已有配置，命令会安全停止。
+不指定 `--templates` 且不加 `--overwrite` 时，如果 `config/openbench/` 已有配置，命令会安全停止。
 先在临时目录生成全部 YAML、检查命名冲突，再原子替换配置目录和 manifest；
 替换失败会恢复原配置。旧版合并的 `inundation_*.yaml` 会随旧配置目录一起备份，
 新版使用 `inundation_fraction_*.yaml` 和 `inundation_area_*.yaml`。
@@ -1091,6 +1091,55 @@ python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR"
 python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR" \
   --jobs-dir "$EXP_DIR/config/jobs_slurm"
 ```
+
+### 按模板新增或覆盖评估配置
+
+`dlb_08` 的 `--templates` 接受一个或多个模板名或文件名；来源目录默认是
+`templates/openbench/`，也可通过 `--template-dir` 指定其他目录。不能在模板名中传入目录路径。
+
+```bash
+# 预览：只新增三份水库模板所缺少的配置；已有文件跳过
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
+  --templates dam_inflow dam_outflow dam_storage --dry-run
+
+# 执行新增，保留已有文件（包括已转换的 stn 配置）
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
+  --templates dam_inflow dam_outflow dam_storage
+
+# 预览：仅重新生成储量模板对应的配置
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
+  --templates dam_storage.yaml --overwrite --dry-run
+
+# 执行：新增缺失的储量配置，并覆盖已有储量配置；其他模板配置保留
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
+  --templates dam_storage --overwrite
+```
+
+| 参数 | 已有目标 YAML | 其他模板生成的 YAML |
+| --- | --- | --- |
+| `--templates ...` | 跳过，只补齐缺失文件 | 保留 |
+| `--templates ... --overwrite` | 覆盖，并新增缺失文件 | 保留 |
+| 不指定 `--templates`，加 `--overwrite` | 按来源目录全部模板重新生成 | 整体替换旧目录，沿用旧行为 |
+
+每个被选模板仍覆盖当前区域的全部流域及十种实验组合；这里不提供按单一流域或处理选择。
+输出逐文件的 `ADD`、`OVERWRITE`、`SKIP` 清单和数量。`--dry-run` 不写配置、manifest 或备份，
+也不执行刷新；目标全部跳过时同样不更新时间戳或创建备份。
+
+指定模板时，manifest 中未修改的项目登记保留，新项目追加，覆盖项目在原位置更新。
+配置内容完全相同则保留原状态，变化后重置状态，正常刷新入口仍会依据实际运行记录重新计算状态。
+原始评估默认年份和掩膜根目录等公共元数据保留；显式传入的新年份、输出目录或掩膜参数
+只作用于本次实际生成的 YAML。`--no-refresh` 是内部参数，不建议普通操作跳过刷新。
+
+已有 YAML 无项目登记、项目名与路径/输出目录冲突、或未选中的登记配置丢失时会报错，
+不会自动认领文件或删除记录。选中模板的缺失文件则允许重新补齐。
+有实际改动时，原配置目录和 manifest 备份到 `provenance/backups/<UTC时间>/`；
+通过临时目录完成更新，配置替换或 manifest 写入失败会恢复原配置。
+刷新失败会明确报告，但已提交的配置更新仍保留，处理刷新错误后可单独运行 `dlb_07`。
+
+**水库配置注意：** 不加 `--overwrite` 会保留已转为站点类型的 YAML。
+覆盖对应模板会恢复为模板生成的网格配置，需要再次运行水库站点转换；未选中的水库模板不受影响。
+评估结果、外部站点数据快照和已有作业文件不被删除。配置更新后，应先完成所需数据准备，
+再用 `dlb_09 --overwrite` 重新生成作业快照；这不等于重新运行已有结果。
 
 ### 水库入流、出流和储量评估
 
