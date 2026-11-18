@@ -1491,7 +1491,7 @@ def _draw_routing_overlays(ax, layers: RoutingOverlayLayers | None, projection):
         ax.add_collection(
             LineCollection(
                 layers.bifurcation_segments,
-                colors="#d62728",
+                colors="#006400",
                 linewidths=0.7,
                 alpha=0.9,
                 transform=projection,
@@ -1511,7 +1511,7 @@ def _add_routing_overlay_legend(legend_handles: list[object], layers: RoutingOve
         )
     if len(layers.bifurcation_segments):
         legend_handles.append(
-            Line2D([], [], color="#d62728", linewidth=1.5,
+            Line2D([], [], color="#006400", linewidth=1.5,
                    label=f"Bifurcations ({len(layers.bifurcation_segments):,} paths)")
         )
 
