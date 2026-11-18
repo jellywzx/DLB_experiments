@@ -7,6 +7,8 @@
 
     cd /share/home/dq134/wzx/openbench/postprocess/dam_analysis
 
+水坝年份使用紫色渐变，堤防保护比例使用棕色渐变，分汊路径使用深绿色；
+三个图层均增加白色描边以增强与底图的区分，水坝库容等级仍由边框色表示。
 三个可选图层默认关闭。使用 ``-D`` 显示水坝，``-L`` 显示堤防保护洪泛区比例，
 ``-B`` 显示分汊路径。同一个短参数中的字母合并作图，例如 ``-DB``、``-LB`` 和
 ``-DLB``；分开书写则分别作图，例如 ``-D -L -B`` 会为每个图层各生成一套图片。
@@ -124,11 +126,12 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as path_effects
 import numpy as np
 import pandas as pd
 import xarray as xr
 from matplotlib.collections import LineCollection
-from matplotlib.colors import ListedColormap, Normalize
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap, Normalize
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from shapely.geometry import box
@@ -201,6 +204,13 @@ RIVER_FEATURE_SCALES = {
     "medium": "50m",
     "coarse": "110m",
 }
+# Keep quantitative overlay palettes separate from the evaluation colorbar.
+DAM_YEAR_CMAP = LinearSegmentedColormap.from_list("dam_year_purple", ["#a979c4", "#4a0073"])
+LEVEE_CMAP = LinearSegmentedColormap.from_list("levee_brown", ["#ba8959", "#65320e"])
+BIFURCATION_COLOR = "#006400"
+DAM_UNKNOWN_YEAR_COLOR = "0.65"
+OVERLAY_HALO_COLOR = "white"
+
 DAM_STORAGE_CLASSES = (
     (0.0, 1000.0, "#2166ac", "Dam storage < 1,000 million m³"),
     (1000.0, 10000.0, "#f28e2b", "Dam storage 1,000–10,000 million m³"),
@@ -1508,9 +1518,10 @@ def _draw_routing_overlays(ax, layers: RoutingOverlayLayers | None, projection):
     if len(layers.levee_segments):
         levee_lines = LineCollection(
             layers.levee_segments,
-            cmap="viridis",
+            cmap=LEVEE_CMAP,
             norm=Normalize(vmin=0.0, vmax=100.0),
             linewidths=0.9,
+            path_effects=[path_effects.withStroke(linewidth=2.3, foreground=OVERLAY_HALO_COLOR)],
             alpha=0.96,
             transform=projection,
             zorder=3.3,
@@ -1521,8 +1532,9 @@ def _draw_routing_overlays(ax, layers: RoutingOverlayLayers | None, projection):
         ax.add_collection(
             LineCollection(
                 layers.bifurcation_segments,
-                colors="#006400",
+                colors=BIFURCATION_COLOR,
                 linewidths=0.7,
+                path_effects=[path_effects.withStroke(linewidth=2.1, foreground=OVERLAY_HALO_COLOR)],
                 alpha=0.9,
                 transform=projection,
                 zorder=3.6,
@@ -1536,12 +1548,14 @@ def _add_routing_overlay_legend(legend_handles: list[object], layers: RoutingOve
         return
     if len(layers.levee_segments):
         legend_handles.append(
-            Line2D([], [], color="#2a788e", linewidth=1.8,
+            Line2D([], [], color=LEVEE_CMAP(0.5), linewidth=1.8,
+                   path_effects=[path_effects.withStroke(linewidth=3.2, foreground=OVERLAY_HALO_COLOR)],
                    label=f"Levee-protected floodplain ({len(layers.levee_segments):,} segments)")
         )
     if len(layers.bifurcation_segments):
         legend_handles.append(
-            Line2D([], [], color="#006400", linewidth=1.5,
+            Line2D([], [], color=BIFURCATION_COLOR, linewidth=1.5,
+                   path_effects=[path_effects.withStroke(linewidth=2.9, foreground=OVERLAY_HALO_COLOR)],
                    label=f"Bifurcations ({len(layers.bifurcation_segments):,} paths)")
         )
 
@@ -1714,11 +1728,12 @@ def plot_grid_map(
                     dams.loc[selected, "lat"],
                     c=dams.loc[selected, "year"],
                     s=dam_sizes[selected],
-                    cmap="viridis",
+                    cmap=DAM_YEAR_CMAP,
                     norm=year_norm,
                     marker="^",
                     edgecolors=edgecolor,
                     linewidths=0.7,
+                    path_effects=[path_effects.withStroke(linewidth=2.1, foreground=OVERLAY_HALO_COLOR)],
                     alpha=0.96,
                     transform=projection,
                     zorder=5,
@@ -1737,10 +1752,11 @@ def plot_grid_map(
                     dams.loc[selected, "lon"],
                     dams.loc[selected, "lat"],
                     s=dam_sizes[selected],
-                    color="0.65",
+                    color=DAM_UNKNOWN_YEAR_COLOR,
                     marker="^",
                     edgecolors=edgecolor,
                     linewidths=0.7,
+                    path_effects=[path_effects.withStroke(linewidth=2.1, foreground=OVERLAY_HALO_COLOR)],
                     transform=projection,
                     zorder=5,
                 )
@@ -1778,9 +1794,10 @@ def plot_grid_map(
                     [],
                     marker="^",
                     linestyle="none",
-                    markerfacecolor="#5ec962",
+                    markerfacecolor=DAM_YEAR_CMAP(0.5),
                     markeredgecolor=edgecolor,
                     markersize=8,
+                    path_effects=[path_effects.withStroke(linewidth=2.1, foreground=OVERLAY_HALO_COLOR)],
                     label=label,
                 )
             )
@@ -2090,7 +2107,7 @@ def parse_args() -> argparse.Namespace:
         "-B",
         "--show-bifurcations",
         action="store_true",
-        help="Overlay CoLM bifurcation endpoint paths in red.",
+        help="Overlay CoLM bifurcation endpoint paths in dark green with a white halo.",
     )
     parser.add_argument(
         "--dam-id",
@@ -2683,6 +2700,9 @@ def plot_combined_map(
         if valid_year.any():
             year_min = float(dams.loc[valid_year, "year"].min())
             year_max = float(dams.loc[valid_year, "year"].max())
+            if year_min == year_max:
+                year_min -= 0.5
+                year_max += 0.5
             year_norm = Normalize(vmin=year_min, vmax=year_max)
             for lower, upper, edgecolor, _ in DAM_STORAGE_CLASSES:
                 selected = (
@@ -2697,11 +2717,12 @@ def plot_combined_map(
                     dams.loc[selected, "lat"],
                     c=dams.loc[selected, "year"],
                     s=dam_sizes[selected],
-                    cmap="viridis",
+                    cmap=DAM_YEAR_CMAP,
                     norm=year_norm,
                     marker="^",
                     edgecolors=edgecolor,
                     linewidths=0.7,
+                    path_effects=[path_effects.withStroke(linewidth=2.1, foreground=OVERLAY_HALO_COLOR)],
                     alpha=0.96,
                     transform=projection,
                     zorder=4,
@@ -2720,10 +2741,11 @@ def plot_combined_map(
                     dams.loc[selected, "lon"],
                     dams.loc[selected, "lat"],
                     s=dam_sizes[selected],
-                    color="0.65",
+                    color=DAM_UNKNOWN_YEAR_COLOR,
                     marker="^",
                     edgecolors=edgecolor,
                     linewidths=0.7,
+                    path_effects=[path_effects.withStroke(linewidth=2.1, foreground=OVERLAY_HALO_COLOR)],
                     transform=projection,
                     zorder=4,
                 )
@@ -2789,9 +2811,10 @@ def plot_combined_map(
                     [],
                     marker="^",
                     linestyle="none",
-                    markerfacecolor="#5ec962",
+                    markerfacecolor=DAM_YEAR_CMAP(0.5),
                     markeredgecolor=edgecolor,
                     markersize=8,
+                    path_effects=[path_effects.withStroke(linewidth=2.1, foreground=OVERLAY_HALO_COLOR)],
                     label=label,
                 )
             )
