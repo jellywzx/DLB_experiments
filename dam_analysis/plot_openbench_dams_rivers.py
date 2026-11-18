@@ -80,8 +80,10 @@ Dam、Levee、Bifurcation 的固定顺序追加图层标签，例如
 
 输入 CSV 需包含站点经纬度，或包含可从同一 case 原始 evaluation CSV 回查的站点 ID。
 输入 NetCDF 需包含一维经纬度坐标和空间二维变量。
-存在标准流域掩膜时，堤防和分汊线段只有在两个端点均位于流域内时才会绘制；
-没有流域掩膜时按地图范围裁剪。使用 ``--routing-file`` 可指定路由文件。
+默认将全部地图图层裁剪到对应流域内，流域外留白，保留矩形坐标轴和经纬度标签。
+优先使用标准流域掩膜；站点模式可回退到路由文件推导的上游流域。
+无法确定流域时需提供 ``--basin-mask``，或使用 ``--no-basin`` 关闭流域限制。
+流域范围优先于 ``--extent``。使用 ``--routing-file`` 可指定路由文件。
 如需指定指标列、地图范围、河网精度、水坝年份或关闭流域边界，可使用相应参数。
 使用 ``--dam-id GRAND_ID`` 可高亮指定水坝的完整下游连通路径；重复该参数可选择
 多座水坝。增加 ``--dam-impact-mode mask --dam-buffer-km 50`` 时，仅保留距离这些
@@ -106,10 +108,12 @@ import sys
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
+from functools import cached_property
 from pathlib import Path
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from cartopy.mpl.path import shapely_to_path
 import matplotlib
 
 matplotlib.use("Agg")
@@ -122,6 +126,9 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import ListedColormap, Normalize
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from shapely.geometry import box
+from shapely.geometry.polygon import orient
+from shapely.ops import unary_union
 from matplotlib.ticker import MaxNLocator
 
 
@@ -274,6 +281,23 @@ class BasinMask:
     data: xr.DataArray
     extent: tuple[float, float, float, float]
     path: Path
+
+    @cached_property
+    def geometry(self):
+        """Union horizontal cell runs, preserving holes and disconnected areas."""
+        lon_edges = coordinate_edges(self.data["lon"].values)
+        lat_edges = coordinate_edges(self.data["lat"].values)
+        rectangles = []
+        for row, values in enumerate(np.asarray(self.data.values, dtype=bool)):
+            transitions = np.diff(np.r_[False, values, False].astype(np.int8))
+            for start, stop in zip(np.flatnonzero(transitions == 1),
+                                   np.flatnonzero(transitions == -1)):
+                rectangles.append(box(lon_edges[start], lat_edges[row],
+                                      lon_edges[stop], lat_edges[row + 1]))
+        geometry = unary_union(rectangles)
+        if geometry.is_empty:
+            raise ValueError(f"Basin mask contains no positive cells: {self.path}")
+        return geometry
 
 
 @dataclass(frozen=True)
@@ -1069,22 +1093,34 @@ def load_river_network(
 
 
 def draw_basin_mask_boundary(ax, basin_mask: BasinMask, projection) -> None:
-    mask = basin_mask.data
-    active_rows = np.flatnonzero(np.asarray(mask.any(dim="lon").values, dtype=bool))
-    active_columns = np.flatnonzero(np.asarray(mask.any(dim="lat").values, dtype=bool))
-    row_slice = slice(max(0, active_rows[0] - 1), min(mask.sizes["lat"], active_rows[-1] + 2))
-    column_slice = slice(max(0, active_columns[0] - 1), min(mask.sizes["lon"], active_columns[-1] + 2))
-    cropped = mask.isel(lat=row_slice, lon=column_slice)
-    ax.contour(
-        cropped["lon"].values,
-        cropped["lat"].values,
-        np.asarray(cropped.values, dtype=float),
-        levels=[0.5],
-        colors=["black"],
-        linewidths=1.2,
-        transform=projection,
-        zorder=4.5,
+    ax.add_geometries(
+        [basin_mask.geometry], crs=projection, facecolor="none",
+        edgecolor="black", linewidth=1.2, zorder=4.5,
     )
+
+
+def clip_map_to_basin(ax, basin_mask: BasinMask | None, projection, gridlines) -> None:
+    """Clip map artists without changing the rectangular axes or tick labels."""
+    if basin_mask is None:
+        return
+    geometry = basin_mask.geometry
+    # Matplotlib's nonzero fill rule requires opposite ring winding for holes.
+    polygons = [geometry] if geometry.geom_type == "Polygon" else geometry.geoms
+    from matplotlib.path import Path as MplPath
+
+    path = MplPath.make_compound_path(
+        *(shapely_to_path(orient(polygon, sign=1.0)) for polygon in polygons)
+    )
+    # FeatureArtist resets its clip to ax.patch during draw. Change that patch,
+    # but leave the rectangular geo spine intact for frame and label placement.
+    ax.patch.set_boundary(path, transform=projection._as_mpl_transform(ax))
+    clip = ax.patch
+    for artist in (*ax.collections, *ax.lines, *ax.images, *ax.patches):
+        artist.set_clip_path(clip)
+        artist.set_clip_on(True)
+    # Gridliner creates its line collections lazily, including on repeated draws.
+    gridlines.collection_kwargs = dict(gridlines.collection_kwargs or {}, clip_path=clip)
+    ax.set_facecolor("white")
 
 
 def automatic_extent_from_grids(
@@ -1770,6 +1806,8 @@ def plot_grid_map(
         color="0.3",
     )
 
+    clip_map_to_basin(ax, basin_mask, projection, gridlines)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
@@ -1973,7 +2011,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         nargs=4,
         metavar=("WEST", "EAST", "SOUTH", "NORTH"),
-        help="Manual map extent; by default it is calculated from the OpenBench station coordinates.",
+        help="Manual map extent when no basin is used; basin extent takes precedence.",
     )
     parser.add_argument(
         "--routing-file",
@@ -1990,12 +2028,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--basin-mask",
         type=Path,
-        help="OpenBench basin-mask NetCDF used for grid data (default: derived from region).",
+        help="Basin-mask NetCDF used to filter data and clip all map layers (default: derived from region).",
     )
     parser.add_argument(
         "--no-basin",
         action="store_true",
-        help="Do not calculate or draw the basin footprint and boundary.",
+        help="Disable basin filtering, clipping, footprint, and boundary.",
     )
     parser.add_argument(
         "--river-detail",
@@ -2508,20 +2546,6 @@ def draw_basin_layer(ax, basin_layer: dict[str, object], projection) -> None:
         transform=projection,
         zorder=0.6,
     )
-    padded_mask = np.pad(mask.astype(float), 1, mode="constant", constant_values=0.0)
-    padded_lon = longitude[0] + (np.arange(mask.shape[1] + 2) - 1) * delta_lon
-    padded_lat = latitude[0] + (np.arange(mask.shape[0] + 2) - 1) * delta_lat
-    ax.contour(
-        padded_lon,
-        padded_lat,
-        padded_mask,
-        levels=[0.5],
-        colors=["#9b5f24"],
-        linewidths=1.1,
-        alpha=0.9,
-        transform=projection,
-        zorder=1.5,
-    )
 
 
 def plot_combined_map(
@@ -2785,6 +2809,8 @@ def plot_combined_map(
             color="0.3",
         )
 
+    clip_map_to_basin(ax, basin_mask, projection, gridlines)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
@@ -3044,6 +3070,21 @@ def process_station_files(
             basin_layer = prepare_basin_layer(
                 args.routing_file, args.basin_cache_dir, region_name
             )
+            if basin_layer is None:
+                raise ValueError(
+                    f"Cannot determine basin for region={region_name!r}. "
+                    "Use --basin-mask PATH or --no-basin."
+                )
+            data = xr.DataArray(
+                basin_layer["mask"], dims=("lat", "lon"),
+                coords={"lat": basin_layer["latitude"], "lon": basin_layer["longitude"]},
+            )
+            lon_edges = coordinate_edges(data["lon"].values)
+            lat_edges = coordinate_edges(data["lat"].values)
+            basin_mask = BasinMask(
+                data, (lon_edges[0], lon_edges[-1], lat_edges[0], lat_edges[-1]),
+                args.routing_file,
+            )
     shared_extent = (
         basin_mask.extent
         if basin_mask is not None
@@ -3160,7 +3201,10 @@ def process_grid_files(
             f"(active_cells={int(basin_mask.data.sum())}, extent={basin_mask.extent})"
         )
     elif not args.no_basin:
-        print(f"No basin mask is configured for region={region_name!r}; basin masking is disabled.")
+        raise ValueError(
+            f"Cannot determine basin for region={region_name!r}. "
+            "Use --basin-mask PATH or --no-basin."
+        )
 
     grid_paths = [path for path, _ in valid_pairs]
     extent = (
