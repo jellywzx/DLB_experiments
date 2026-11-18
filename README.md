@@ -190,7 +190,7 @@ bash "$EXP_DIR/config/jobs/submit_batch.sh" --dry-run --stage spinup
 本机基础模板 `templates/dlb_base.nml` 明确设置 `DEF_TRACER_NUM = 0`。
 保留原有区域边界、网格、1996–1999 spinup、2000–2005 模拟及评估规则：
 USA/SA/Mekong 使用 06min routing，Global 使用 15min，参考 Amazon 文件不会将其统一改成 0.25° 泥沙实验。
-OpenBench 独立生成器为 USA 生成 60 份 YAML，其他区域各 30 份，包含成对比较、八组实验汇总比较和 spinup、CTL 单独评估，
+OpenBench 独立生成器为 USA 生成 120 份 YAML，其他区域各 60 份，包含成对比较、八组实验汇总比较和 spinup、CTL 单独评估，
 径流参考源为 `OpenBench_Streamflow_Daily`。
 
 ## 1. 通用入口与旧服务器默认值
@@ -1014,7 +1014,7 @@ No jobs to generate or submit.
 
 `--overwrite` 只允许替换作业文件，不能代替 `--rerun-unverified` 的显式重跑授权。
 如果仍显示 18 个项目、使用合并的 `inundation_*.yaml`，说明该单流域实验仍使用
-旧版配置和 manifest；当前三个变量模板加八组汇总比较应为每流域 30 个项目。
+旧版配置和 manifest；当前六个变量模板加八组汇总比较应为每流域 60 个项目。
 另外检查 YAML 的 `project.output_dir`：应为实验的 `openbench_output` 根目录，
 不要包含项目名，否则 OpenBench 再追加项目名后会出现
 `openbench_output/<project>/<project>`。更正路径不会搬移或删除原目录中的结果。
@@ -1091,6 +1091,164 @@ python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR"
 python "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR" \
   --jobs-dir "$EXP_DIR/config/jobs_slurm"
 ```
+
+### 水库入流、出流和储量评估
+
+`templates/openbench/` 新增三个独立日尺度模板，`dlb_08` 会自动发现，无需修改生成器：
+
+| 模板 | OpenBench 变量 | CoLM profile 候选变量 | metrics | scores |
+| --- | --- | --- | --- | --- |
+| `dam_inflow.yaml` | `Dam_Inflow` | `qresv_in` | `KGE, correlation, rSD, percent_bias` | 七项评分（见下文） |
+| `dam_outflow.yaml` | `Dam_Outflow` | `qresv_out` | `KGE, NSE, percent_bias` | 七项评分（见下文） |
+| `dam_storage.yaml` | `Dam_Water_Storage` | `volresv` | `RMSE, NRMSE` | 七项评分（见下文） |
+
+当前三份模板均启用 `Overall_Score`、`nBiasScore`、`nRMSEScore`、`nPhaseScore`、
+`nIavScore`、`nSpatialScore`、`nSeasonalityScore`。可自行修改模板中的评分列表，
+再按需选择覆盖；新增模式不会把模板修改写入已经存在的 YAML。
+
+参考源均为 `ResOpsUS`。加上原有三个模板，每流域现在生成 60 个项目（六份模板乘十种实验组合），
+USA 两流域生成 120 个。`--all` 会包含新增的水库项目；当前没有按模板名筛选的提交参数。
+
+**运行前限制：** 实际检查过
+`EXP000_spinup_SA_D_0p1_hist_unitcat_2005-08.nc` 的元数据，三个变量均为
+`(time, reservoir)`，入流/出流单位 `m^3/s`，储量单位 `m^3`。
+现有生成器写入的模拟类型是 `grid`；变量名称 fallback 并不能把 reservoir 维度转换成网格。
+针对这种输出，先使用下文的 `dlb_prepare_reservoir_evaluation.py` 按
+`resv_GRAND_ID` 精确提取成站点时序，再执行评估；无需将水库向量插值到网格，也不改变 `dlb_08`。
+CTL 或未启用水库的实验是否提供有效水库输出也需单独确认，不能将缺测、填充值或不存在的水库当作零值。
+
+#### 准备 ResOpsUS 观测注册
+
+本地参考目录为 `/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS`。
+抽查 `ResOpsUS_41.nc` 的元数据，观测变量为 `inflow/outflow/storage`，对应单位是
+`m3 s-1/m3 s-1/million cubic meters`。本地 OpenBench 支持将 `m3` 转为统一的 `mcm`；
+因此储量 RMSE 的结果单位应以评估产物属性为准，不能默认是 m³。原始储量和储量距平不能混用。
+
+内置 ResOpsUS 注册的目录和 1908–1957 年范围不适用于此本地数据。辅助脚本只读 CSV 元数据，
+将两种分辨率的清单生成独立副本，将 `DIR` 改成真实观测文件的绝对路径，并注册到当前用户的
+`~/.openbench/references/dlb_resopsus.yaml`。不会改动原观测、原清单或 OpenBench 内置注册表。
+目录创建、清单副本和注册写入都需要 `--apply`：
+
+```bash
+# 使用已安装 PyYAML 的现代 Python 环境；应在将运行评估的账号下执行
+export DLB_ROOT=/share/home/dq134/wzx/DLB_experiments
+
+# 只预览，检查两个清单和观测文件是否存在
+python "$DLB_ROOT/dlb_prepare_resopsus.py"
+
+# 生成清单副本，并写入当前账号的用户注册目录
+python "$DLB_ROOT/dlb_prepare_resopsus.py" --apply
+
+# 日后需要更新注册时，备份旧注册并生成新的清单快照
+python "$DLB_ROOT/dlb_prepare_resopsus.py" --apply --overwrite
+```
+
+此处提供的原始清单存在同 ID 不同匹配位置的歧义：06min 的 `137, 557, 726, 1781`，
+15min 的 `557, 726`。脚本默认拒绝准备，避免替你选择位置。可以先人工整理一份独立来源清单，
+通过 `--source-dir` 指定；也可以明确排除每个清单内这些 ID 的**全部记录**（不会选择其中一行）：
+
+```bash
+python "$DLB_ROOT/dlb_prepare_resopsus.py" --exclude-duplicate-ids
+python "$DLB_ROOT/dlb_prepare_resopsus.py" --exclude-duplicate-ids --apply
+```
+
+排除仅作用于新清单副本，原始文件保留。两个分辨率独立排除，各自的有效 ID 集合可能不同。
+
+两种清单都准备好后，OpenBench 原生 ResOpsUS filter 按模拟分辨率自动选择：
+0.1° 对应 `06min`，0.25° 对应 `15min`。各站点保留自己的起止年份，注册总年份仅表示启用站点的覆盖包络，
+不保证每个变量在整个区间都有有效观测。已有 OpenBench 进程需重启以加载注册。
+若设置 `OPENBENCH_HOME`，默认注册目录改为 `$OPENBENCH_HOME/.openbench`；准备和评估必须使用一致的环境。
+`--user-dir` 用于显式指定配置目录（例如隔离验证）；普通评估仍须保证 OpenBench 实际加载同一个目录。
+其他用户注册文件也可能覆盖 ResOpsUS，应检查最终解析结果。不要在正在运行的评估期间切换该注册源。
+
+此本地 `06min` 清单共 167 座水库，`15min` 共 142 座，均没有 Amazon 范围内站点。
+ResOpsUS filter 会按经纬度范围和年份筛选，没有匹配时明确报 `No ResOpsUS stations selected`。
+站点清单匹配坐标本身不等于已经验证了模拟水库 ID；仍需核对实际水库和流域归属。
+
+#### 生成配置和作业
+
+先生成配置，然后完成水库 ID 匹配及站点数据准备，再生成作业：
+
+```bash
+export EXP_DIR=/实际的实验目录
+
+# 重新生成全部模板配置；备份旧配置，但会替换手工定制的实验 YAML
+python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite
+
+# 此处先按下节完成 dam_inflow/outflow/storage 的站点转换
+
+# 生成作业快照并预览；-D 会选择所有模板的 D 项目
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --overwrite
+
+# 核对清单、数据维度和观测覆盖后，提交同一份快照
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --submit
+```
+
+当前 `dlb_09` 会跳过输出目录非空的项目；`--overwrite` 只替换作业文件，不强制重新评估旧结果。
+生成配置、注册数据源和作业 dry-run 都不代表科学评估已成功。
+
+#### 将 `(time, reservoir)` 转为站点时序
+
+`dlb_prepare_reservoir_evaluation.py` 接受**一份已经生成的水库评估 YAML**。
+它读取该配置的历史目录和文件前缀，对每个月的 `resv_GRAND_ID(reservoir)` 与
+ResOpsUS 清单 `ID` 做精确匹配，允许每个月水库列顺序不同，不使用数组下标作为水库 ID，
+也不使用坐标最近邻。仅保留区域、年份范围内，且在所有选定模拟的所有月份中均存在的观测 ID。
+其他未匹配观测不参与该项目，最终 ID 和来源文件记录在 `matching.json`。
+
+```bash
+# 指向参考准备脚本生成的副本，不能使用包含重复 ID 的原始清单
+export RESOPSUS_LIST=/准备脚本打印的清单目录/ResOpsUS_reservoir_matched_06min.csv
+
+# 示例为 USA 的 Missouri 流域、E1_D 入流；默认只检查元数据，不读取流量/储量数组、不写文件
+python "$DLB_ROOT/dlb_prepare_reservoir_evaluation.py" \
+  --config "$EXP_DIR/config/openbench/missouri/dam_inflow_D.yaml" \
+  --station-list "$RESOPSUS_LIST" \
+  --out-dir "$EXP_DIR/config/reservoir_station_data" \
+  --simulation E1_D
+
+# 核对匹配 ID 后，添加 --apply 才提取时序并替换这一份 YAML
+python "$DLB_ROOT/dlb_prepare_reservoir_evaluation.py" \
+  --config "$EXP_DIR/config/openbench/missouri/dam_inflow_D.yaml" \
+  --station-list "$RESOPSUS_LIST" \
+  --out-dir "$EXP_DIR/config/reservoir_station_data" \
+  --simulation E1_D --apply
+```
+
+出流和储量分别将 `--config` 改为 `dam_outflow_D.yaml`、`dam_storage_D.yaml`；
+其他流域/处理使用实际 YAML 路径和配置中的模拟标签。Global 必须使用 15min 清单。
+
+不加 `--simulation` 时保留并检查配置中的全部模拟。CTL 若没有水库输出会明确失败，
+**不会自动将 CTL 删除或填零**；只有显式指定 `--simulation E1_D` 才会将此配置改为 E1_D 单独评估，
+因此上例不再包含与 CTL 的两两比较。若多个实验都有有效水库输出，可重复指定
+`--simulation` 保留所需实验，使用各实验共同匹配的 ID。仅保留一个模拟时自动关闭跨模拟比较图。
+
+`--apply` 将选中变量写成每站一个 `time` 维度 NetCDF，生成对应模拟站点 CSV，再将 YAML 的
+模拟类型改为 `stn`，显式指定变量名、单位和站点清单。时序保留原始时间坐标，不猜测平移；
+抽查的示例是每日中午时间戳，对应日窗口，最终与观测的日尺度对齐交由 OpenBench 处理。
+CF 缺测值由 xarray 解码；另将 CoLM 未标注的 `-1e36` 转为 NaN，可用 `--missing-value` 指定其他哨兵。
+重复时间、非单调时间、无效/重复 GRanD ID、缺月、未知单位或全缺测站点会停止处理。
+
+每次写入创建独立数据快照，包含 `original.yaml` 备份、`prepared.yaml`、匹配审计及来源文件信息；
+只有提取全部成功后才原子替换原 YAML。清单路径作为该 YAML 的参考源 override 固定，
+不依赖运行账号重新注册 ResOpsUS。快照和观测目录必须对实际运行账号可读。
+快照目录必须在 `config/openbench` 外，以免被后续生成配置时删除。
+不支持对已转换的站点 YAML 再次转换；需要更新源数据时，从原模板重新生成 YAML 或恢复备份后再准备。
+重新运行 `dlb_08 --overwrite` 会恢复网格配置，因此必须再次执行此准备步骤；
+之后使用 `dlb_09 --overwrite` 更新作业快照，避免继续引用旧配置。
+
+该脚本不会增加观测覆盖：Amazon 没有对应 ResOpsUS 站点时直接停止，不能通过技术转换得到观测评估结果。
+
+#### 指标解释与尚未实现的诊断
+
+- 原始 KGE 使用相关系数 r、标准差比 α 和均值比 β。`correlation` 对应 r，`rSD` 对应 α；
+  β 未独立输出，可按同一时间范围和有效样本下的 `1 + percent_bias / 100` 推导。
+  此处 PBIAS 正值表示模拟高估；观测均值/方差为零时，相关比值指标可能为 NaN。
+- `NRMSE` 是 `RMSE / abs(mean(observation))`，不是按容量或极差归一化，也不是 `nRMSEScore`。
+- `nSeasonalityScore` 比较多年平均月循环幅度，`nPhaseScore` 比较其峰值月份，均需要完整的 12 个月循环。
+  它们不是洪水事件峰现时间差；完整蓄放水过程还需要逐月气候态曲线。
+- 洪峰削减率、事件峰现时间差和水量平衡残差尚未实现，需要联合读取入流、出流和储量。
+  `APFB` 是模拟与观测年最大流量偏差，不能替代削峰率；水量平衡还需核对储量采样时刻、流量平均时段，
+  以及库面降水、蒸发、取水等额外项，不能将简化残差直接解释为全部守恒误差。
 
 核实已有可信成功记录后，手动登记一个 OpenBench 项目成功：
 

@@ -1,0 +1,22 @@
+project:
+  tim_res: Day
+evaluation:
+  variables: [Dam_Water_Storage]
+reference:
+  Dam_Water_Storage: ResOpsUS
+metrics:
+  - RMSE
+  - NRMSE
+scores:
+  - Overall_Score
+  - nBiasScore
+  - nRMSEScore
+  - nPhaseScore
+  - nIavScore
+  - nSpatialScore
+  - nSeasonalityScore
+comparison:
+  items: [Taylor_Diagram, HeatMap, Diff_Plot]
+statistics:
+  enabled: false
+  items: []

@@ -213,7 +213,7 @@ class ExperimentTemplateTests(unittest.TestCase):
     def test_all_regions_and_job_stages(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);cases=root/'cases';cases.mkdir()
-            expected={'USA':60,'SA':30,'Mekong':30,'Global':30}
+            expected={'USA':120,'SA':60,'Mekong':60,'Global':60}
             for index,(region,count) in enumerate(expected.items(),901):
                 run(str(TOOLS/'dlb_01_create_experiment.py'),f'EXP{index}','smoke',region,
                     '--repo-root',str(REPO),'--case-root',str(cases),
@@ -229,7 +229,8 @@ class ExperimentTemplateTests(unittest.TestCase):
                     for simulation in data['simulation'].values():
                         self.assertIn('_hist_unitcat_',next(iter(simulation['variables'].values()))['prefix'])
                 for basin_dir in (exp/'config/openbench').iterdir():
-                    for kind in ('streamflow','inundation_fraction','inundation_area'):
+                    for kind in ('streamflow','inundation_fraction','inundation_area',
+                                 'dam_inflow','dam_outflow','dam_storage'):
                         self.assertTrue((basin_dir/f'{kind}_DLB.yaml').is_file())
                         self.assertFalse((basin_dir/f'{kind}_ALL.yaml').exists())
                         spinup=yaml.safe_load((basin_dir/f'{kind}_spinup.yaml').read_text())
@@ -580,7 +581,7 @@ class ExperimentTemplateTests(unittest.TestCase):
                 '--node','tms13','--cores','72','--tasks-per-node','72','--draft')
             colm_path=target/'config/colm/run_manifest.json'
             before=json.loads(colm_path.read_text())
-            self.assertEqual(len(list((target/'config/openbench').rglob('*.yaml'))),30)
+            self.assertEqual(len(list((target/'config/openbench').rglob('*.yaml'))),60)
             self.assertIn('OpenBench_Streamflow_Daily',
                           (target/'config/openbench/mekong/streamflow_DLB.yaml').read_text())
             # Later changes or removal of the external profile must not alter an existing study.

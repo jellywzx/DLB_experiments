@@ -57,10 +57,12 @@ def write_template(path:Path,value:dict)->None:
 
 
 class OpenBenchTemplateTests(unittest.TestCase):
-    def test_three_template_rules(self):
+    def test_template_rules(self):
         templates=generator.load_templates(generator.TEMPLATE_ROOT)
-        self.assertEqual(set(templates),{'streamflow','inundation_fraction','inundation_area'})
-        for kind,template in templates.items():
+        self.assertEqual(set(templates),{'streamflow','inundation_fraction','inundation_area',
+                                         'dam_inflow','dam_outflow','dam_storage'})
+        for kind in ('streamflow','inundation_fraction','inundation_area'):
+            template=templates[kind]
             flood=kind!='streamflow'
             variable={'streamflow':'Streamflow','inundation_fraction':'Inundation_Fraction',
                       'inundation_area':'Inundation_Area'}[kind]
@@ -75,9 +77,32 @@ class OpenBenchTemplateTests(unittest.TestCase):
             self.assertEqual(template['comparison']['items'],['Taylor_Diagram','HeatMap','Diff_Plot'])
             self.assertEqual(template['statistics'],{'enabled':False,'items':[]})
 
+    def test_reservoir_templates_and_available_metrics(self):
+        templates=generator.load_templates(generator.TEMPLATE_ROOT)
+        expected={
+            'dam_inflow':('Dam_Inflow',['KGE','correlation','rSD','percent_bias']),
+            'dam_outflow':('Dam_Outflow',['KGE','NSE','percent_bias']),
+            'dam_storage':('Dam_Water_Storage',['RMSE','NRMSE']),
+        }
+        for kind,(variable,metrics) in expected.items():
+            scores=['Overall_Score','nBiasScore','nRMSEScore','nPhaseScore',
+                    'nIavScore','nSpatialScore','nSeasonalityScore']
+            template=templates[kind]
+            self.assertEqual(template['evaluation']['variables'],[variable])
+            self.assertEqual(template['reference'],{variable:'ResOpsUS'})
+            self.assertEqual(template['metrics'],metrics)
+            self.assertEqual(template['scores'],scores)
+            self.assertEqual(template['project']['tim_res'],'Day')
+            self.assertEqual(template['comparison']['items'],['Taylor_Diagram','HeatMap','Diff_Plot'])
+            self.assertEqual(template['statistics'],{'enabled':False,'items':[]})
+            if importlib.util.find_spec('openbench'):
+                from openbench.core.registry import IMPLEMENTED_METRICS, IMPLEMENTED_SCORES
+                self.assertTrue(set(metrics)<=IMPLEMENTED_METRICS)
+                self.assertTrue(set(scores)<=IMPLEMENTED_SCORES)
+
     def test_all_regions_manifest_and_simulation_rules(self):
         templates=generator.load_templates(generator.TEMPLATE_ROOT)
-        for region,count in {'USA':60,'SA':30,'Mekong':30,'Global':30}.items():
+        for region,count in {'USA':120,'SA':60,'Mekong':60,'Global':60}.items():
             with self.subTest(region=region),tempfile.TemporaryDirectory() as td:
                 root=Path(td);fixture(root,region);generate(root)
                 projects=json.loads((root/'manifest.yaml').read_text())['evaluation']['projects']
@@ -135,7 +160,7 @@ class OpenBenchTemplateTests(unittest.TestCase):
                     parsed=load_config(config)
                     self.assertEqual(len(parsed.evaluation.variables),1)
 
-    def test_fourth_variable_and_template_edits_need_no_python_changes(self):
+    def test_additional_variable_and_template_edits_need_no_python_changes(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);fixture(root);templates=root/'templates'
             shutil.copytree(generator.TEMPLATE_ROOT,templates)
@@ -145,7 +170,7 @@ class OpenBenchTemplateTests(unittest.TestCase):
             template['metrics']=['RMSE','correlation'];template['scores']=['Overall_Score']
             write_template(templates/'evapotranspiration.yaml',template)
             generate(root,'--template-dir',str(templates))
-            self.assertEqual(len(list((root/'config/openbench').rglob('*.yaml'))),40)
+            self.assertEqual(len(list((root/'config/openbench').rglob('*.yaml'))),70)
             config=root/'config/openbench/global/evapotranspiration_DLB.yaml'
             data=yaml.safe_load(config.read_text())
             self.assertEqual(data['evaluation'],template['evaluation'])
@@ -246,9 +271,9 @@ class OpenBenchTemplateTests(unittest.TestCase):
                      contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(submitter.main(),0)
                 rows=(root/f'config/openbench_jobs/openbench_{flag}_projects.tsv').read_text().splitlines()[1:]
-                self.assertEqual(len(rows),6)
+                self.assertEqual(len(rows),12)
                 for row in rows:
-                    _,project,config,output,digest=row.split('\t')
+                    _,project,config,output=row.split('\t')
                     self.assertTrue(project.endswith('_'+flag))
                     expected={'E0_CTL',*TREATMENTS.values()} if flag=='comparisons' else {'E0_CTL',treatment}
                     self.assertEqual(set(yaml.safe_load(Path(config).read_text())['simulation']),expected)
@@ -261,9 +286,9 @@ class OpenBenchTemplateTests(unittest.TestCase):
             with patch.object(sys,'argv',['submit',str(root),'--all','--openbench-exe',str(executable)]), \
                  contextlib.redirect_stdout(stdout):
                 self.assertEqual(submitter.main(),0)
-            self.assertIn('selected=60 pending=59 skipped=1',stdout.getvalue())
+            self.assertIn('selected=120 pending=119 skipped=1',stdout.getvalue())
             rows=(root/'config/openbench_jobs/openbench_all_projects.tsv').read_text().splitlines()[1:]
-            self.assertEqual(len(rows),59)
+            self.assertEqual(len(rows),119)
             self.assertNotIn(project,{row.split('\t')[1] for row in rows})
             self.assertEqual((output/'result.nc').read_bytes(),b'protected')
 

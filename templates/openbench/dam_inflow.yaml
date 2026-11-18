@@ -1,0 +1,24 @@
+project:
+  tim_res: Day
+evaluation:
+  variables: [Dam_Inflow]
+reference:
+  Dam_Inflow: ResOpsUS
+metrics:
+  - KGE
+  - correlation
+  - rSD
+  - percent_bias
+scores:
+  - Overall_Score
+  - nBiasScore
+  - nRMSEScore
+  - nPhaseScore
+  - nIavScore
+  - nSpatialScore
+  - nSeasonalityScore
+comparison:
+  items: [Taylor_Diagram, HeatMap, Diff_Plot]
+statistics:
+  enabled: false
+  items: []
