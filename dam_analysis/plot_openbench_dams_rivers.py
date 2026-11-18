@@ -89,6 +89,11 @@ Dam、Levee、Bifurcation 的固定顺序追加图层标签，例如
 多座水坝。增加 ``--dam-impact-mode mask --dam-buffer-km 50`` 时，仅保留距离这些
 下游路径50 km以内的站点或网格结果。使用 ``-D --dam-id all`` 时，自动追踪经过
 建设年份、地图范围和流域掩膜筛选后全部可见水坝的下游路径。
+差值和距平图默认根据流域筛选后全部有限值确定零中心对称色标，向外调整为易读刻度；
+不使用百分位截断。例如 [-0.03, 0.07] 使用 [-0.08, 0.08]。全零时使用 [-1, 1]。
+``--color-limit L`` 可严格指定差值/距平色标为 [-L, L]（L 为有限正数），
+优先于模板显式上下限。原始指标、评分和集合均值保留 OpenBench 原有规则。
+每张图独立确定范围；无有效值时报错，日志记录实际极值和最终色标范围。
 查看全部参数及默认值：
 
     python plot_openbench_dams_rivers.py --help
@@ -156,7 +161,7 @@ from openbench.config.adapter import build_fig_nml
 from openbench.core.registry import IMPLEMENTED_METRICS, IMPLEMENTED_SCORES
 from openbench.data.unit import UnitProcessing
 from openbench.visualization.Fig_Basic_Plot import colorbar_extend, rounded_limits
-from openbench.visualization.Fig_toolbox import convert_unit, get_index, process_unit
+from openbench.visualization.Fig_toolbox import convert_unit, get_colormap, get_index, process_unit
 
 from openbench_dams_rivers_common import (
     DEFAULT_DAMS,
@@ -587,17 +592,6 @@ def _openbench_limits(values: np.ndarray, metadata: ResultMetadata, option: dict
     if option.get("vmin_max_on"):
         return float(option["vmin"]), float(option["vmax"])
     measure = metadata.measure
-    if metadata.product_type in {"anomaly", "difference"}:
-        if measure in {
-            "bias", "percent_bias", "rSD", "PBIAS_HF", "PBIAS_LF", "NSE", "KGE",
-            "KGESS", "correlation", "kappa_coeff", "rSpearman",
-        }:
-            low, high = np.quantile(finite, [0.05, 0.95])
-            low, high = math.floor(float(low)), math.ceil(float(high))
-            if measure == "percent_bias":
-                low, high = max(low, -100), min(high, 100)
-            return float(low), float(high)
-        return _finite_range(finite)
     if metadata.measure_type == "score":
         return 0.0, 1.0
 
@@ -616,6 +610,31 @@ def _openbench_limits(values: np.ndarray, metadata: ResultMetadata, option: dict
     return 0.0, 1.0
 
 
+def difference_color_ticks(values: np.ndarray, color_limit: float | None,
+                           option: dict[str, object]) -> np.ndarray:
+    """Use basin-local extrema; explicit ranges take precedence over nice ticks."""
+    actual_min, actual_max = _finite_range(values)
+    if color_limit is not None:
+        if not np.isfinite(color_limit) or color_limit <= 0:
+            raise ValueError("--color-limit must be a positive finite number")
+        return np.linspace(-color_limit, color_limit, 9)
+    if option.get("vmin_max_on"):
+        low, high = float(option["vmin"]), float(option["vmax"])
+        if not np.isfinite([low, high]).all() or low >= high:
+            raise ValueError("Difference color limits must be finite with vmin < vmax")
+        return np.linspace(low, high, 9)
+    amplitude = max(abs(actual_min), abs(actual_max))
+    if amplitude == 0:
+        print("All basin-local differences are zero; using display range [-1, 1].")
+        return np.linspace(-1.0, 1.0, 9)
+    target = amplitude / 4.0
+    scale = 10.0 ** math.floor(math.log10(target))
+    step = next(multiplier * scale for multiplier in (1, 2, 2.5, 5, 10)
+                if multiplier * scale >= target)
+    count = math.ceil(amplitude / step)
+    return np.arange(-count, count + 1, dtype=float) * step
+
+
 def resolve_openbench_plot_style(
     values: np.ndarray,
     metadata: ResultMetadata,
@@ -630,18 +649,29 @@ def resolve_openbench_plot_style(
         key = "make_stn_plot_index" if metadata.data_type == "station" else "make_geo_plot_index"
         option = figures[key].copy()
 
-    if args.color_limit is not None:
-        vmin, vmax = -float(args.color_limit), float(args.color_limit)
-    else:
-        vmin, vmax = _openbench_limits(values, metadata, option)
-    if not np.isfinite([vmin, vmax]).all() or vmin >= vmax:
-        center = float(vmin) if np.isfinite(vmin) else 0.0
-        vmin, vmax = center - 0.5, center + 0.5
-
-    index_name = "" if metadata.product_type in {"anomaly", "difference"} else metadata.measure
-    cmap, ticks, norm, levels, extend = get_index(vmin, vmax, option.get("cmap", "Spectral"), index_name)
     actual_min, actual_max = _finite_range(values)
-    if metadata.product_type not in {"anomaly", "difference"}:
+    if metadata.product_type in {"anomaly", "difference"}:
+        ticks = difference_color_ticks(values, args.color_limit, option)
+        levels = ticks.copy()
+        cmap = get_colormap(option.get("cmap", "RdBu_r"))
+        norm = Normalize(vmin=float(ticks[0]), vmax=float(ticks[-1]))
+        extend = colorbar_extend(actual_min, actual_max, float(ticks[0]), float(ticks[-1]))
+        print(
+            f"Colorbar: product={metadata.product_type}, measure={metadata.measure}, "
+            f"actual=[{actual_min:.8g}, {actual_max:.8g}], "
+            f"limits=[{ticks[0]:.8g}, {ticks[-1]:.8g}]"
+        )
+    else:
+        if args.color_limit is not None:
+            vmin, vmax = -float(args.color_limit), float(args.color_limit)
+        else:
+            vmin, vmax = _openbench_limits(values, metadata, option)
+        if not np.isfinite([vmin, vmax]).all() or vmin >= vmax:
+            center = float(vmin) if np.isfinite(vmin) else 0.0
+            vmin, vmax = center - 0.5, center + 0.5
+        cmap, ticks, norm, levels, extend = get_index(
+            vmin, vmax, option.get("cmap", "Spectral"), metadata.measure
+        )
         extend = colorbar_extend(actual_min, actual_max, float(ticks[0]), float(ticks[-1]))
     option.update({"vmin": float(ticks[0]), "vmax": float(ticks[-1]), "extend": extend})
 
@@ -2094,7 +2124,7 @@ def parse_args() -> argparse.Namespace:
         "--kge-limit",
         dest="color_limit",
         type=float,
-        help="Manual symmetric color limit; by default OpenBench's native rule is used.",
+        help="Positive symmetric color limit; exact for differences/anomalies. Otherwise these use basin-local extrema; raw results use native OpenBench rules.",
     )
     dam_year_group = parser.add_mutually_exclusive_group()
     dam_year_group.add_argument(
@@ -2132,6 +2162,10 @@ def parse_args() -> argparse.Namespace:
         dict.fromkeys(_normalized_dam_id(value) for value in (args.dam_ids or ()))
     )
     args.layer_groups = _layer_groups_from_argv(sys.argv[1:])
+    if args.color_limit is not None and (
+        not np.isfinite(args.color_limit) or args.color_limit <= 0
+    ):
+        parser.error("--color-limit must be a positive finite number")
     if args.workers < 1:
         parser.error("-j/--workers must be at least 1")
     if "all" in args.dam_ids and args.dam_ids != ("all",):
