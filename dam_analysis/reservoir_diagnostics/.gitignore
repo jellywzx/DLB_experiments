@@ -1,0 +1,16 @@
+# Generated results and caches; source and synthetic tests only.
+__pycache__/
+.pytest_cache/
+runs/
+/data/
+/figures/
+/tables/
+*.log
+*.nc
+*.csv
+*.png
+*.pdf
+*.jpg
+*.jpeg
+*.npy
+*.npz
