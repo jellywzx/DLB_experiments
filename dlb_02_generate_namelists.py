@@ -41,6 +41,7 @@ from datetime import datetime,timezone
 from pathlib import Path
 from dlb_00_workflow_common import WorkflowError,preprocessor_state
 
+from dlb_overwrite import backup_files
 from dlb_site_config import parse_site_args,unsupported_fields,input_issues,KEYS
 
 BASE_TEMPLATE = Path('run/examples/Amazon_Grid_25km_IGBP_VG_RiverLake.nml')
@@ -363,7 +364,7 @@ def run_command(command:list[str])->None:
         raise ValueError(result.stderr or result.stdout or 'command failed')
 
 
-def regenerate_experiment(root:Path,overwrite:bool)->int:
+def regenerate_experiment(root:Path,overwrite:bool,*,dry_run:bool=False)->int:
     root=root.resolve();manifest_path=root/'manifest.yaml'
     colm_dir=root/'config/colm';jobs_dir=root/'config/jobs'
     if not overwrite:
@@ -386,6 +387,9 @@ def regenerate_experiment(root:Path,overwrite:bool)->int:
     if markers or products:
         sample=[*(str(x) for x in markers[:3]),*(str(x) for x in products[:3])]
         die('Refusing to overwrite CoLM configuration after run products exist: '+', '.join(sample))
+    if dry_run:
+        print(f'DRY-RUN: back up and replace {colm_dir} and {jobs_dir}; update {manifest_path}; no files written.')
+        return 0
     region=manifest['region'];resources=old.get('resources',{})
     repo=Path(old['paths']['repo_root']);forcing=old['forcing']['dataset']
     staging=Path(tempfile.mkdtemp(prefix='.colm-regenerate.',dir=str(root)))
@@ -517,7 +521,8 @@ def main() -> int:
     parser.add_argument('--strict-build', action='store_true',
                         help='Also fail if checked-in define.h macros disagree with study')
     parser.add_argument('--overwrite', action='store_true',
-                        help='Overwrite only generated names, never delete unrelated files')
+                        help='Back up and replace generated names; with --experiment-dir replace config/colm and config/jobs entirely')
+    parser.add_argument('--dry-run',action='store_true',help='Preview without writing files or refreshing')
     parser.add_argument('--forcing-root',type=Path)
     args = parse_site_args(parser,recorded_options=('--experiment-dir',))
 
@@ -526,7 +531,7 @@ def main() -> int:
         forbidden=(args.repo_root,args.out_dir,args.case_root,args.forcing_nml,args.study_id,args.study_slug)
         if any(x is not None for x in forbidden):
             die('--experiment-dir cannot be combined with flat-generation path/study options')
-        return regenerate_experiment(args.experiment_dir,args.overwrite)
+        return regenerate_experiment(args.experiment_dir,args.overwrite,dry_run=args.dry_run)
     missing=[name for name,value in (('--repo-root',args.repo_root),('--out-dir',args.out_dir),
                                       ('--case-root',args.case_root),('--forcing-nml',args.forcing_nml))
              if value is None]
@@ -854,6 +859,10 @@ def main() -> int:
     if exists and not args.overwrite:
         die('Output files already exist (use a fresh --out-dir or --overwrite): '
             + ', '.join(str(p) for p in exists))
+    for name in texts:print(f'{"OVERWRITE" if (out/name).exists() else "ADD"} {out/name}')
+    if args.dry_run:
+        print('DRY-RUN: no files or backups written.');return 0
+    if args.overwrite:backup_files([out/name for name in texts],out)
     # All source/input checks and render validations have passed. Now write.
     out.mkdir(parents=True, exist_ok=True)
     if not args.no_lsf and log_dir == out / 'logs':

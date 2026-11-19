@@ -1,5 +1,53 @@
 #!/usr/bin/env python3
 """Generate and optionally submit full-slot single-host LSF OpenBench array jobs."""
+
+# 用法示例（在已激活 OpenBench 环境的 shell 中执行；各组按需选择）：
+#   DLB_ROOT=/share/home/dq134/wzx/DLB_experiments
+#   EXP_DIR=/path/to/experiment  # 替换为目标实验目录，需先用 dlb_08 生成 OpenBench 配置
+# openbench 不在 PATH 时，在预览和提交命令中添加 --openbench-exe /path/to/openbench。
+#
+# 1. 普通运行：先预览，再提交。输出目录非空的项目会提示并跳过。
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --submit
+# 若显示 pending=0、SKIP existing result，表示没有待提交项目；需要重跑时使用第 2 组。
+#
+# 2. 覆盖重跑：目录非空也加入待运行清单，成功、失败或状态不明的旧结果均可重算。
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite --submit
+# 预览会显示 OVERWRITE non-empty output directory，不移动旧结果。
+# 正式任务启动时，将旧目录归档到输出根目录的 .dlb_openbench_backups/，再创建干净目录运行。
+# 有 .dlb_openbench_running 标记的项目仍会跳过；排队期间目录身份发生变化也会跳过。
+# 覆盖提交必须保留 --overwrite，并按当前目录状态和资源参数重新生成覆盖作业。
+#
+# 3. 仅重试确认失败的项目：不重跑成功或状态不明的结果，旧目录在任务启动时归档。
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --retry-failed --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --retry-failed --submit
+# 再次失败后，或需更新重试清单/资源时，重新生成重试快照并预览：
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --retry-failed --overwrite --dry-run
+# 核对后生成并提交本轮重试作业（保留 --overwrite）：
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --retry-failed --overwrite --submit
+# --retry-failed 与 --overwrite 同用时，仍只选择确认失败的项目。
+#
+# 4. 限定评估项目：将上述命令的 --all 替换为所需选择器。
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -L -B --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -LB --overwrite --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --ctl --spinup --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons --dry-run
+# -D/-L/-B/-DL/-DB/-LB/-DLB 分别对应 E1_D/E2_L/E3_B/E4_DL/E5_DB/E6_LB/E7_ALL。
+# -L -B 选择两个单项处理，-LB 选择组合处理 E6_LB；--all 不能与其他选择器一起使用。
+#
+# 5. 自定义资源的覆盖重跑示例：预览、提交均带相同资源参数。
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --overwrite --cores 4 --slots-per-node 48 --queue normal --memory 150G --walltime 24:00 --max-concurrent 20 --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --overwrite --cores 4 --slots-per-node 48 --queue normal --memory 150G --walltime 24:00 --max-concurrent 20 --submit
+# --cores 为每个评估使用的核数，--slots-per-node 为每个任务在单节点申请的 slots，
+# --max-concurrent 为数组任务最大并发数；--cores 不得大于 --slots-per-node。
+#
+# --dry-run 完全不写文件；不带 --dry-run/--submit 时只生成作业文件；仅 --submit 调用 bsub。
+# 覆盖前备份已有作业文件至作业目录的 .dlb_backups/；旧结果在任务启动时另行归档。
+# 不加 --overwrite 时，已有且匹配的作业快照会复用，资源参数以快照为准。
+# 作业文件：$EXP_DIR/config/openbench_jobs/；调度器日志：$EXP_DIR/logs/openbench/。
+# 更多参数：python3 "$DLB_ROOT/dlb_09_submit_openbench.py" --help
 from __future__ import annotations
 
 import argparse
@@ -15,6 +63,7 @@ import uuid
 from datetime import datetime,timezone
 from pathlib import Path
 
+from dlb_overwrite import backup_files
 from dlb_openbench_state import output_dir,task_state,sha256,atomic_json
 
 
@@ -71,25 +120,30 @@ def result_state(path:Path)->str:
 
 
 def result_token(path:Path)->str:
+    if not path.exists():return 'missing'
     stat=path.stat()
     return f'{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}'
 
 
-def retry_task(config:Path,output:Path,token:str,openbench:Path,cores:int)->int:
-    """Execute one immutable retry snapshot; never called by the preview path."""
+def retry_task(config:Path,output:Path,token:str,openbench:Path,cores:int,*,overwrite:bool=False)->int:
+    """Execute one immutable rerun snapshot; never called by the preview path."""
+    output.parent.mkdir(parents=True,exist_ok=True)
     lock=output.parent/f'.{output.name}.retry.lock'
     with lock.open('a') as handle:
         try:fcntl.flock(handle,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
             print(f'SKIP retry already active: {output}');return 0
         state=result_state(output)
-        if state!='failed' or result_token(output)!=token:
+        if (output.is_symlink() or (output.exists() and not output.is_dir())
+            or state=='running' or (not overwrite and state!='failed')
+            or result_token(output)!=token):
             print(f'SKIP retry snapshot no longer matches: {output} state={state}');return 0
-        stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-        backup=output.parent/'.dlb_openbench_backups'/f'{output.name}.{stamp}.{uuid.uuid4().hex}'
-        backup.parent.mkdir(parents=True,exist_ok=True)
-        output.rename(backup)
-        print(f'BACKUP {output} -> {backup}',flush=True)
+        if output.exists():
+            stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+            backup=output.parent/'.dlb_openbench_backups'/f'{output.name}.{stamp}.{uuid.uuid4().hex}'
+            backup.parent.mkdir(parents=True,exist_ok=True)
+            output.rename(backup)
+            print(f'BACKUP {output} -> {backup}',flush=True)
         output.mkdir()
         running=output/'.dlb_openbench_running';running.touch()
         # An interrupted process deliberately leaves its running marker for review.
@@ -117,7 +171,7 @@ def write_atomic(path:Path,text:str)->None:
 
 def job_script(label:str,count:int,mapping:Path,openbench:Path,logs:Path,queue:str,
                cores:int,slots_per_node:int,memory:str,walltime:str,
-               max_concurrent:int|None,retry:bool=False)->str:
+               max_concurrent:int|None,retry:bool=False,overwrite:bool=False)->str:
     array=f'openbench_{label}[1-{count}]'+(f'%{max_concurrent}' if max_concurrent else '')
     lines=['#!/usr/bin/env bash',f'#BSUB -J "{array}"',
         f'#BSUB -q {queue}',f'#BSUB -n {slots_per_node}',f'#BSUB -W {walltime}',
@@ -156,10 +210,11 @@ def job_script(label:str,count:int,mapping:Path,openbench:Path,logs:Path,queue:s
         '  echo "FAILED $(date -Is) $PROJECT status=$status" >&2',
         '  exit "$status"',
         'fi','']
-    if retry:
+    if retry or overwrite:
+        task_flag='--_retry-task' if retry else '--_overwrite-task'
         start=lines.index('if [[ -e "$OUTPUT" ]]; then')
         lines=lines[:start]+[
-            f'exec {sq(sys.executable)} {sq(Path(__file__).resolve())} --_retry-task '
+            f'exec {sq(sys.executable)} {sq(Path(__file__).resolve())} {task_flag} '
             f'"$CONFIG" "$OUTPUT" "$TOKEN" "$OPENBENCH" {cores}','']
     else:
         index=next(i for i,line in enumerate(lines) if line.startswith('if "$OPENBENCH" check'))
@@ -168,8 +223,51 @@ def job_script(label:str,count:int,mapping:Path,openbench:Path,logs:Path,queue:s
     return '\n'.join(lines)
 
 
+def generate_submit_entries(root:Path,*,overwrite:bool=False,dry_run:bool=False)->list[Path]:
+    """Render lazy submission entries without requiring OpenBench or a scheduler."""
+    destination=root/'config/openbench_jobs'
+    selectors=[(short,'-'+short) for short,_,_ in SELECTIONS]
+    selectors.extend((name,'--'+name) for name in ('ctl','spinup','comparisons','all'))
+    files={}
+    for label,selector in selectors:
+        text=f'''#!/usr/bin/env bash
+# OpenBench {label}: preview by default; only --submit calls bsub.
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")" && pwd)"
+EXP_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+ARGS=("$@")
+while (($#)); do
+  case "$1" in
+    --submit|--dry-run|--overwrite|--retry-failed|--rerun-unverified|-h|--help) shift ;;
+    --openbench-exe|--queue|--cores|--slots-per-node|--memory|--walltime|--max-concurrent|--out-dir|--log-dir)
+      (($# >= 2)) || {{ echo "Missing value: $1" >&2; exit 2; }}
+      shift 2 ;;
+    --openbench-exe=*|--queue=*|--cores=*|--slots-per-node=*|--memory=*|--walltime=*|--max-concurrent=*|--out-dir=*|--log-dir=*) shift ;;
+    *) echo "Unsupported option (experiment selection is fixed): $1" >&2; exit 2 ;;
+  esac
+done
+exec {sq(sys.executable)} {sq(Path(__file__).resolve())} "$EXP_DIR" {selector} "${{ARGS[@]}}"
+'''
+        files[destination/f'submit_openbench_{label}.sh']=text
+    # Check all conflicts before writing any entry. Do not follow user symlinks.
+    for path,text in files.items():
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise ValueError(f'unsafe submission entry: {path}')
+        if path.exists() and path.read_text(encoding='utf-8')!=text and not overwrite:
+            raise ValueError(f'submission entry differs: {path}; use --overwrite')
+    changed=[path for path,text in files.items() if path.exists() and path.read_text(encoding='utf-8')!=text]
+    if dry_run:return list(files)
+    if overwrite:backup_files(changed,destination)
+    destination.mkdir(parents=True,exist_ok=True)
+    for path,text in files.items():
+        if not path.exists() or path.read_text(encoding='utf-8')!=text:
+            write_atomic(path,text)
+        if not os.access(path,os.X_OK):path.chmod(path.stat().st_mode|0o111)
+    return list(files)
+
+
 def main()->int:
-    p=argparse.ArgumentParser(description=__doc__)
+    p=argparse.ArgumentParser(description=__doc__,allow_abbrev=False)
     p.add_argument('experiment_dir',type=Path)
     p.add_argument('-D',dest='select_d',action='store_true',help='Select E1_D')
     p.add_argument('-L',dest='select_l',action='store_true',help='Select E2_L')
@@ -178,6 +276,8 @@ def main()->int:
     p.add_argument('-DB',dest='select_db',action='store_true',help='Select E5_DB')
     p.add_argument('-LB',dest='select_lb',action='store_true',help='Select E6_LB')
     p.add_argument('-DLB',dest='select_dlb',action='store_true',help='Select E7_ALL')
+    p.add_argument('--ctl',action='store_true',help='Select control evaluation projects')
+    p.add_argument('--spinup',action='store_true',help='Select spinup evaluation projects')
     p.add_argument('--comparisons',action='store_true',help='Select eight-experiment comparison projects')
     p.add_argument('--all',dest='all_projects',action='store_true',help='Select every OpenBench project')
     p.add_argument('--retry-failed',action='store_true',
@@ -194,17 +294,20 @@ def main()->int:
                    help='Maximum simultaneous array tasks (default: 20)')
     p.add_argument('--out-dir',type=Path,help='Default: EXP_DIR/config/openbench_jobs')
     p.add_argument('--log-dir',type=Path,help='Default: EXP_DIR/logs/openbench')
-    p.add_argument('--overwrite',action='store_true',help='Replace generated mapping/job files only')
+    p.add_argument('--overwrite',action='store_true',help='Replace job files and rerun selected outputs; archive old directories at task startup, skip running outputs')
     p.add_argument('--rerun-unverified',action='store_true',
-                   help='Explicitly permit running over historical results without trusted records; never delete them')
-    p.add_argument('--submit',action='store_true',help='Submit with bsub; default is dry-run')
+                   help='Legacy compatibility option; use --overwrite to rerun existing outputs')
+    mode=p.add_mutually_exclusive_group()
+    mode.add_argument('--submit',action='store_true',help='Submit with bsub; default is dry-run')
+    mode.add_argument('--dry-run',action='store_true',help='Preview only; never write files or call bsub')
     args=p.parse_args()
 
     requested=[(short,treatment) for short,treatment,dest in SELECTIONS if getattr(args,dest)]
-    if args.comparisons:requested.append(('comparisons','comparisons'))
+    for name in ('ctl','spinup','comparisons'):
+        if getattr(args,name):requested.append((name,name))
     if args.all_projects and requested:p.error('--all cannot be combined with experiment selectors')
     if not args.all_projects and not requested:
-        p.error('select --all, --comparisons or at least one of -D/-L/-B/-DL/-DB/-LB/-DLB')
+        p.error('select --all, --ctl, --spinup, --comparisons or at least one of -D/-L/-B/-DL/-DB/-LB/-DLB')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.queue):p.error('invalid --queue')
     if not 1<=args.cores<=100000:p.error('--cores must be >= 1')
     if not 1<=args.slots_per_node<=100000:p.error('--slots-per-node must be >= 1')
@@ -225,6 +328,7 @@ def main()->int:
         selected=[item for item in projects if item.get('treatment') in treatments]
     if not selected:raise ValueError(f'no OpenBench projects selected for {label}')
     if args.retry_failed:label+='_retry_failed'
+    elif args.overwrite:label+='_overwrite'
 
     config_root=(root/'config/openbench').resolve();seen_projects=set();seen_configs=set();pending=[];skipped=[];selection=[]
     for item in selected:
@@ -246,14 +350,27 @@ def main()->int:
             print(f'STATE {project}: {state} (manifest={item.get("status","missing")})')
             if state=='failed':pending.append((project,config,output))
             else:skipped.append((project,output))
+        elif args.overwrite:
+            if output.is_symlink() or (output.exists() and not output.is_dir()):
+                raise ValueError(f'unsafe overwrite output (expected a directory): {output}')
+            if result_state(output)=='running':
+                skipped.append((project,output))
+            else:
+                if has_results(output):
+                    print(f'OVERWRITE non-empty output directory: {project} -> {output}; archive old results at task startup')
+                pending.append((project,config,output))
         elif has_results(output):skipped.append((project,output))
         else:pending.append((project,config,output))
 
     print(f'Selection {label}: selected={len(selected)} pending={len(pending)} skipped={len(skipped)}')
     for project,output in skipped:
-        reason='not a confirmed failed result' if args.retry_failed else 'existing result'
+        reason=('not a confirmed failed result' if args.retry_failed else
+                'running result' if args.overwrite else 'existing result (non-empty output; use --overwrite to rerun)')
         print(f'SKIP {reason}: {project} -> {output}')
+    entries=generate_submit_entries(root,overwrite=args.overwrite,dry_run=args.dry_run)
+    print(f'Submission entries: {len(entries)} at {root/"config/openbench_jobs"}')
     if not pending:
+        if args.dry_run:print('DRY-RUN: no files or backups written.')
         print('No jobs to generate or submit.')
         return 0
 
@@ -280,7 +397,7 @@ def main()->int:
             or saved.get('job_sha256')!=sha256(job)):
             raise ValueError('stale job snapshot; regenerate with --overwrite')
         print(f'Reusing generated job snapshot: {job}')
-        print('Resource options are read from that snapshot. Use --overwrite only to replace generated job files.')
+        print('Resource options are read from that snapshot. Use --overwrite to regenerate job files and rerun selected outputs (old results are archived).')
     else:
         detected=args.openbench_exe or shutil.which('openbench')
         if not detected:
@@ -288,23 +405,28 @@ def main()->int:
         openbench=Path(detected).expanduser().resolve()
         if not openbench.is_file() or not os.access(openbench,os.X_OK):
             raise ValueError(f'OpenBench is not executable: {openbench}')
+        if args.dry_run:
+            print(f'DRY-RUN: would generate {len(pending)} jobs at {job}; no files or backups written; no jobs submitted.')
+            return 0
+        if args.overwrite:backup_files([mapping,job,snapshot],out_dir)
         out_dir.mkdir(parents=True,exist_ok=True);log_dir.mkdir(parents=True,exist_ok=True)
-        if args.retry_failed:
+        if args.retry_failed or args.overwrite:
             # Submitted jobs retain an immutable mapping even after --overwrite.
             mapping=out_dir/f'openbench_{label}_{uuid.uuid4().hex}_projects.tsv'
-        rows=['index\tproject\tconfig\toutput_dir'+('\ttoken' if args.retry_failed else '')]
+        rows=['index\tproject\tconfig\toutput_dir'+('\ttoken' if args.retry_failed or args.overwrite else '')]
         rows.extend(f'{i}\t{project}\t{config}\t{output}'+
-                    (f'\t{result_token(output)}' if args.retry_failed else '')
+                    (f'\t{result_token(output)}' if args.retry_failed or args.overwrite else '')
                     for i,(project,config,output) in enumerate(pending,1))
         write_atomic(mapping,'\n'.join(rows)+'\n')
         write_atomic(job,job_script(label,len(pending),mapping,openbench,log_dir,args.queue,
                                     args.cores,args.slots_per_node,args.memory,args.walltime,
-                                    args.max_concurrent,retry=args.retry_failed))
+                                    args.max_concurrent,retry=args.retry_failed,overwrite=args.overwrite))
         job.chmod(0o755)
         atomic_json(snapshot,{**expected,'mapping_sha256':sha256(mapping),'job_sha256':sha256(job)})
         print(f'Generated {len(pending)} jobs: {job}')
     if not args.submit:
-        print(f'DRY-RUN: bsub < {job}')
+        mode='DRY-RUN' if args.dry_run else 'NOT SUBMITTED'
+        print(f'{mode}: bsub < {job}')
         return 0
     bsub=shutil.which('bsub')
     if not bsub:raise ValueError('bsub not found in PATH')
@@ -320,9 +442,9 @@ if __name__=='__main__':
     try:
         if len(sys.argv)==3 and sys.argv[1]=='--_result-ok':
             sys.exit(1 if log_outcome(Path(sys.argv[2]))=='failed' else 0)
-        if len(sys.argv)==7 and sys.argv[1]=='--_retry-task':
+        if len(sys.argv)==7 and sys.argv[1] in ('--_retry-task','--_overwrite-task'):
             sys.exit(retry_task(Path(sys.argv[2]),Path(sys.argv[3]),sys.argv[4],
-                                Path(sys.argv[5]),int(sys.argv[6])))
+                                Path(sys.argv[5]),int(sys.argv[6]),overwrite=sys.argv[1]=='--_overwrite-task'))
         sys.exit(main())
     except (ValueError,OSError,json.JSONDecodeError) as exc:
         print(f'ERROR: {exc}',file=sys.stderr);sys.exit(2)

@@ -1,5 +1,7 @@
 # CoLM DLB 区域实验工作流
 
+覆盖、备份与纯预览的约定见[统一覆盖规则](OVERWRITE_RULES.md)。
+
 本目录用于创建和管理水库（D）、堤防（L）与分汊（B）的区域全因子实验，包括 CoLM namelist、LSF/Slurm 作业、restart 交接、阶段检查和 OpenBench 配置。
 
 所有工具都不会隐式提交作业。restart 工具默认 dry-run，只有显式使用 `--apply` 才会写入 case；提交助手只有显式使用 `--submit` 才会调用调度器。
@@ -384,7 +386,7 @@ python "$DLB_ROOT/dlb_02_generate_namelists.py" \
 
 如需检查 routing/reservoir NetCDF 关键变量，在上面的完整命令末尾追加 `--check-netcdf`。如需把源码宏不一致视为失败，追加 `--strict-build`。两个选项可以同时使用。
 
-`--draft` 只用于输入尚未齐备时预览配置；draft 配置不能进入正式运行流程。`--overwrite` 只覆盖生成器负责的同名文件，使用前应先检查输出目录。
+`--draft` 只用于输入尚未齐备时生成配置；draft 配置不能进入正式运行流程。`--overwrite` 的覆盖范围与备份位置见[统一覆盖规则](OVERWRITE_RULES.md)。
 
 ### 4.3 重新生成现有实验的 CoLM 配置
 
@@ -825,10 +827,10 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
   --submit
 ```
 
-`--submit` 只会复用与当前选中项目、YAML SHA256、待运行列表一致且文件未变的作业快照。
-旧格式或过期快照会被拒绝，须使用 `--overwrite` 重新生成。只有需要修改 queue、cores、
-slots、memory、walltime、并发数或 OpenBench 路径并重新生成作业时，才使用
-`--overwrite --submit`；`--overwrite` 始终只替换作业清单和 LSF 脚本。
+所有支持 `--overwrite` 的脚本遵循[统一覆盖规则](OVERWRITE_RULES.md)：默认保护已有内容，
+覆盖前备份，显式 `--dry-run` 完全不写文件。`dlb_09` 不带 `--dry-run/--submit` 时仅生成作业；
+只有 `--submit` 调用调度器。普通提交可复用匹配快照，过期快照需显式授权重新生成。
+`dlb_09 --overwrite` 同时授权归档旧结果并重跑所选项目；覆盖提交也需带上该参数。
 
 脚本默认从当前 `PATH` 查找 `openbench`，并将绝对路径写入 LSF 作业，因此计算
 节点不需要再次激活虚拟环境。如果不使用 `source` 激活环境，也可以显式传入
@@ -844,30 +846,30 @@ slots、memory、walltime、并发数或 OpenBench 路径并重新生成作业�
 export DLB_ROOT=/share/home/dq134/wzx/DLB_experiments
 export EXP_DIR=/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_Mekong
 
-# 1. 首次 dry-run：生成全部 pending 项目的清单和 LSF 脚本，不提交
+# 1. 仅生成全部 pending 项目的清单和 LSF 脚本，不提交；纯预览请加 --dry-run
 # 先激活 OpenBench 环境；或增加 --openbench-exe /path/to/openbench
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all
 
-# 2. 修改 YAML、任务列表或资源后，重新生成作业快照并预览，不提交
+# 2. 覆盖重跑预览，不写文件；正式提交须保留相同资源参数及 --overwrite
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite \
   --queue normal --cores 4 --slots-per-node 48 \
-  --memory 150G --walltime 24:00 --max-concurrent 20
+  --memory 150G --walltime 24:00 --max-concurrent 20 --dry-run
 
-# 3. 核对预览后，正式提交与当前配置匹配的作业快照
-python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --submit
+# 3. 核对后，重新生成覆盖作业并提交
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite --submit
 
 # 4. 仅在人工检查、备份历史结果后，显式允许 unverified 项目重跑
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
-  --all --rerun-unverified --overwrite
+  --all --overwrite --dry-run
 # 再核对清单，确认后提交；保留同一个显式重跑选项
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
-  --all --rerun-unverified --submit
+  --all --overwrite --submit
 ```
 
 以上步骤按需要选择执行，不必连续执行全部步骤。生成的文件位于
 `$EXP_DIR/config/openbench_jobs/`：`openbench_all_projects.tsv`、
 `submit_openbench_all_array.lsf` 和 `openbench_all_snapshot.json`。
-`--all` 不等于强制重算；`--overwrite` 只更新作业文件，不删除已有评估结果。
+`--all` 只选择项目；`--overwrite` 授权覆盖重跑，任务启动时归档旧结果。
 
 通常只需两步：先 dry-run，核对清单后直接加 `--submit`；第二步不需要
 `--overwrite`。例如提交全部变量的八组比较项目：
@@ -879,10 +881,9 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons --submit
 ```
 
-相同配置可重复 dry-run；只有确实需要替换生成的作业文件时才使用 `--overwrite`，
-例如 YAML、待运行列表或资源配置发生变化后。过期快照仍会拒绝提交，避免运行旧配置。
-需要更换资源时可先用 `--overwrite` 重新预览，再直接加 `--submit` 提交。
-`STATE failed` 表示上次任务失败或中断、当前允许重试，不表示生成作业失败。
+显式 `--dry-run` 可以重复执行，不生成作业、备份或提交入口。
+不带 `--dry-run` 可先生成作业文件，再由普通 `--submit` 复用有效快照。
+使用 `--overwrite --dry-run` 后，覆盖提交仍需 `--overwrite --submit`，并再次传入资源参数。
 
 只选择全部变量的八组比较项目，可使用以下命令（默认仅生成作业并预览）：
 
@@ -903,8 +904,22 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --comparisons
 如果节点容量不同，应通过 `--slots-per-node` 指定实际值；管理员特权作业或不消耗
 这些 slots 的特殊任务仍可能共享节点。节点不足时由 LSF 排队。
 
-普通模式会自动跳过已有非空输出目录的项目，不覆盖成功、失败或部分结果。这个检查
-会在生成任务清单和作业真正启动时各执行一次，以覆盖排队期间结果发生变化的情况。
+普通模式会提示输出目录非空并跳过，同时提示可用 `--overwrite` 重跑。
+`dlb_09 --overwrite` 会重新生成作业并允许重算所选项目，包括成功、失败和状态不明的旧结果；
+有 `.dlb_openbench_running` 标记的项目仍跳过。预览不会移动结果或执行 OpenBench。
+正式任务启动时先核对目录身份并获取项目锁，将旧目录归档到输出根目录的
+`.dlb_openbench_backups/<project>.<UTC时间>.<唯一标识>/`，然后创建干净目录重新评估。
+排队期间目录身份发生变化的任务会跳过，重复执行同一快照也不会再次覆盖新结果。
+
+```bash
+# 先预览；会显示 OVERWRITE non-empty output directory 和待运行数量
+python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite --dry-run
+# 正式提交时也必须带 --overwrite；按本次目录状态和资源参数重新生成覆盖作业
+python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite --submit
+```
+
+覆盖作业使用 `_overwrite` 名称及唯一 mapping 路径，与普通作业分开。
+`--retry-failed --overwrite` 仍只筛选确认失败的项目，`--overwrite` 用于更新该重试快照。
 重跑失败项目时使用 `--retry-failed`，可与 `--all` 或 `-D`、`-DL` 等选择器组合：
 
 ```bash
@@ -924,7 +939,7 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -DL --retry-failed --ov
 重试依据。旧脚本可能在 OpenBench 内部失败但退出码为 0 时写入成功标记，因此明确的
 失败摘要优先于成功标记；新版生成的普通作业和重试作业均检查这一情况。
 
-有 `.dlb_openbench_running` 的项目总是跳过；成功、状态不明、其他标记冲突、符号链接
+在 `--retry-failed` 模式下，有 `.dlb_openbench_running` 的项目总是跳过；成功、状态不明、其他标记冲突、符号链接
 输出目录也跳过。manifest 状态仅用于显示，单凭 manifest 的 failed 不会触发重试。
 残留 running 标记需在人工确认任务已停止后处理，脚本不自动判断调度器任务是否存活。
 
@@ -940,7 +955,7 @@ python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -DL --retry-failed --ov
 对再次失败的项目需用 `--overwrite` 生成新快照。不要删除仍被排队作业引用的清单。
 计算节点必须能读取脚本中记录的提交工具路径及 Python 解释器路径。
 
-如需重算成功或状态不明的项目，仍需先人工备份或移走对应输出目录，再使用普通模式。
+如需重算成功或状态不明的项目，使用上述 `--overwrite` 模式，旧目录在任务启动时自动归档。
 任务状态由 `dlb_openbench_state.py` 统一判定，提交入口和刷新脚本使用相同规则：
 
 | 状态 | 判断依据 | 默认处理 |
@@ -993,26 +1008,15 @@ failed，不能登记为当前配置成功。每项目在输出根目录的 `.dl
 运行记录无锁但仍为 running 时按中断失败重试，不需要人工删除锁文件。
 计算节点必须能访问生成作业时的 Python 环境、DLB 执行器和支持跨节点 flock 的共享文件系统。
 
-对于 unverified 的旧结果，先人工检查并自行备份，再显式允许重跑（不会删除已有文件）：
-
-```bash
-# dry-run：明确授权运行在历史结果目录上，仍由 OpenBench 自身管理增量缓存
-python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --rerun-unverified --overwrite
-# 核对清单后再提交，授权选项必须与快照一致
-python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --rerun-unverified --submit
-```
-
-如果执行 `--all --overwrite` 后看到以下输出，表示全部项目被历史结果保护阻止，
-不是 `--overwrite` 报错：
+对于状态不明的历史结果，使用 `--overwrite` 显式允许归档后重跑；
+`--rerun-unverified` 为旧接口保留参数，当前提交器的覆盖授权以 `--overwrite` 为准。
+目录非空时默认输出如下：
 
 ```text
-STATE unverified: ...
-BLOCK unverified: use --rerun-unverified after reviewing/backing up results
-Selection all: selected=18 pending=0 skipped=18
+SKIP existing result (non-empty output; use --overwrite to rerun): ...
 No jobs to generate or submit.
 ```
 
-`--overwrite` 只允许替换作业文件，不能代替 `--rerun-unverified` 的显式重跑授权。
 如果仍显示 18 个项目、使用合并的 `inundation_*.yaml`，说明该单流域实验仍使用
 旧版配置和 manifest；当前六个变量模板加八组汇总比较应为每流域 60 个项目。
 另外检查 YAML 的 `project.output_dir`：应为实验的 `openbench_output` 根目录，
@@ -1029,16 +1033,15 @@ python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite
 
 # 2. 显式允许历史结果重跑，重新生成全部 pending 项目的作业，只预览、不提交
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
-  --all --rerun-unverified --overwrite
+  --all --overwrite --dry-run
 
-# 3. 核对项目数量、输出路径及清单后，再正式提交同一份快照
+# 3. 核对项目数量、输出路径及清单后，按当前状态重新生成覆盖作业并提交
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" \
-  --all --rerun-unverified --submit
+  --all --overwrite --submit
 ```
 
 若不需要迁移模板、现有 YAML 的输出路径也正确，可直接从第 2 步开始。
-`--rerun-unverified` 不会强制重跑 `completed_unchanged` 或 `running` 项目，
-也不会默认向 OpenBench 添加 `--force`。
+`--overwrite` 会重跑所选的已有结果，跳过有 running 标记的项目；不向 OpenBench 添加 `--force`。
 
 修改变量模板或评估年份后，可以单独重新生成 YAML，不会改动
 CoLM namelist、jobs、case 或已有 OpenBench 输出：
@@ -1056,20 +1059,20 @@ python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
 替换失败会恢复原配置。旧版合并的 `inundation_*.yaml` 会随旧配置目录一起备份，
 新版使用 `inundation_fraction_*.yaml` 和 `inundation_area_*.yaml`。
 
-**重新生成 YAML 不代表已有结果已按新配置重新评估。** 有可信成功记录且配置变化
-的项目现在会进入 pending；失败任务也允许重试，均不清理已有结果。
+**重新生成 YAML 不代表已有结果已按新配置重新评估。** 目录非空时默认跳过；
+使用 `dlb_09 --overwrite` 授权归档旧目录并重新评估。
 修改模板后先重生成 YAML，或直接修改实验 YAML，然后重生成作业快照：
 
 ```bash
 # 只生成清单和作业，预览待运行状态；不提交
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite
-# 核对之后才正式提交（只有 --submit 调用 bsub）
-python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --submit
+# 核对之后才正式提交（只有 --submit 调用 bsub；覆盖提交仍需 --overwrite）
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --overwrite --submit
 ```
 
-`--overwrite` 只替换 mapping、LSF 脚本和快照元数据，不删除科学评估结果。
-资源参数仍由已验证的快照决定；需要更改资源时重新生成。所有新执行仍正常调用
-`openbench check` 和 `openbench run`，不默认附加 `--force`，复用 OpenBench 增量机制。
+`dlb_09 --overwrite` 替换作业文件并授权重跑，旧结果先归档，再使用干净目录运行。
+覆盖提交按当前资源参数重新生成快照。所有新执行仍正常调用
+`openbench check` 和 `openbench run`，不默认附加 `--force`。
 需要强制重算或特殊续跑时，人工备份后直接使用 OpenBench 的 `--force`、`--resume`
 （以所用版本帮助为准）；直接运行 OpenBench 不会创建 DLB 可信运行记录。
 
@@ -1156,7 +1159,7 @@ python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" \
 **水库配置注意：** 不加 `--overwrite` 会保留已转为站点类型的 YAML。
 覆盖对应模板会恢复为模板生成的网格配置，需要再次运行水库站点转换；未选中的水库模板不受影响。
 评估结果、外部站点数据快照和已有作业文件不被删除。配置更新后，应先完成所需数据准备，
-再用 `dlb_09 --overwrite` 重新生成作业快照；这不等于重新运行已有结果。
+再用 `dlb_09 --overwrite` 预览覆盖作业，并用 `--overwrite --submit` 提交重新评估。
 
 ### 水库入流、出流和储量评估
 
@@ -1246,11 +1249,11 @@ python "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite
 # 生成作业快照并预览；-D 会选择所有模板的 D 项目
 python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --overwrite
 
-# 核对清单、数据维度和观测覆盖后，提交同一份快照
-python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --submit
+# 核对清单、数据维度和观测覆盖后，重新生成覆盖作业并提交
+python "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --overwrite --submit
 ```
 
-当前 `dlb_09` 会跳过输出目录非空的项目；`--overwrite` 只替换作业文件，不强制重新评估旧结果。
+当前 `dlb_09` 默认提示并跳过非空输出目录；加 `--overwrite` 后允许归档旧目录并重新评估。
 生成配置、注册数据源和作业 dry-run 都不代表科学评估已成功。
 
 #### 将 `(time, reservoir)` 转为站点时序
@@ -1395,8 +1398,8 @@ bash -n "$EXP_DIR"/config/jobs_slurm/*.slurm \
 
 - 创建器不会创建 case，也不会运行 CoLM/OpenBench 或提交作业。
 - restart 工具默认 dry-run；只有 `--apply` 会写入 case。
-- 提交助手默认 dry-run；只有 `--submit` 会调用 `bsub` 或 `sbatch`。
+- 显式 `--dry-run` 不写文件；`dlb_09` 默认只生成作业；只有 `--submit` 调用调度器。
 - `--output-dir` 与 `--experiments-root` 互斥。
-- `--overwrite` 只应用于配置或作业脚本生成，不应用于模型结果。
+- `dlb_09 --overwrite` 允许覆盖重跑 OpenBench 结果（任务启动时先归档）；不覆盖 CoLM 模型结果。
 - 不要在已有 restart/history 的 case 上强行重新交接。
 - 不要把 `--draft` 生成的配置用于正式模拟。

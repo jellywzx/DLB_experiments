@@ -79,7 +79,9 @@ def main() -> int:
     parser.add_argument('--source-dir', type=Path, default=DEFAULT_SOURCE)
     parser.add_argument('--user-dir', type=Path,
                         help='OpenBench config directory; default: $OPENBENCH_HOME/.openbench or ~/.openbench')
-    parser.add_argument('--apply', action='store_true', help='Write prepared lists and user reference overlay')
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument('--dry-run',action='store_true',help='Preview without writing files (default)')
+    mode.add_argument('--apply', action='store_true', help='Write prepared lists and user reference overlay')
     parser.add_argument('--overwrite', action='store_true', help='Back up and replace this helper\'s existing overlay')
     parser.add_argument('--exclude-duplicate-ids', action='store_true',
                         help='Exclude ALL rows for ambiguous repeated IDs; never choose one coordinate automatically')

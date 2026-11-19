@@ -14,6 +14,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
+from dlb_overwrite import backup_files
 from dlb_site_config import parse_site_args
 from dlb_00_workflow_common import WorkflowError,load_study,error_exit
 
@@ -167,7 +168,8 @@ def main()->int:
     p.add_argument('--mpi-root',type=Path,help='Optional MPI root; uses bin/mpirun')
     p.add_argument('--intel-env',type=Path,help='Optional environment script sourced by each job')
     p.add_argument('--workdir',type=Path,help='Working directory, defaults to executable parent')
-    p.add_argument('--overwrite',action='store_true')
+    p.add_argument('--overwrite',action='store_true',help='Back up and replace generated job files; preserve unrelated files')
+    p.add_argument('--dry-run',action='store_true',help='Preview without writing files')
     p.add_argument('--allow-nonstandard-schedule',action='store_true',
                    help='Generate jobs for intentional temporary start/end dates')
     p.add_argument('--allow-draft',action='store_true',help=argparse.SUPPRESS)
@@ -215,6 +217,10 @@ def main()->int:
     exists=[output/k for k in files if (output/k).exists()]
     if exists and not args.overwrite:
         raise WorkflowError('已有作业文件，默认不覆盖: '+', '.join(str(x) for x in exists))
+    for name in files:print(f'{"OVERWRITE" if (output/name).exists() else "ADD"} {output/name}')
+    if args.dry_run:
+        print('DRY-RUN: no files or backups written.');return 0
+    if args.overwrite:backup_files([output/name for name in files],output)
     output.mkdir(parents=True,exist_ok=True)
     log_dir.mkdir(parents=True,exist_ok=True)
     for name,contents in files.items():
