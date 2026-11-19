@@ -37,14 +37,14 @@ class StageStatusTests(unittest.TestCase):
             self,load_study,restart_ready,month_files,marker):
         load_study.return_value=fixture_study()
         argv=['dlb_06_stage_status.py','--nml-dir','/synthetic/config/colm',
-              '--allow-nonstandard-schedule','--require-complete','--json']
+              '--allow-nonstandard-schedule','--require-complete','--json','--workers','1']
         with patch.object(sys,'argv',argv),contextlib.redirect_stdout(io.StringIO()) as output:
             code=status.main()
         self.assertEqual(code,0)
         self.assertTrue(json.loads(output.getvalue())['colm_complete'])
         load_study.assert_called_once_with(Path('/synthetic/config/colm'),
                                            allow_draft=False,validate_schedule=False)
-        self.assertTrue(all(call.args[1]==2006 for call in restart_ready.call_args_list[-8:]))
+        self.assertEqual(sum(call.args[1]==2006 for call in restart_ready.call_args_list),8)
         self.assertTrue(all(call.args[1:]==(2001,2005) for call in month_files.call_args_list))
 
     @patch.object(status,'marker',return_value=True)
@@ -58,7 +58,7 @@ class StageStatusTests(unittest.TestCase):
             return year!=2006,[]
 
         argv=['dlb_06_stage_status.py','--nml-dir','/synthetic/config/colm',
-              '--require-complete','--json']
+              '--require-complete','--json','--workers','1']
         with patch.object(status,'restart_ready',side_effect=restart_ready), \
                 patch.object(sys,'argv',argv),contextlib.redirect_stdout(io.StringIO()) as output:
             code=status.main()

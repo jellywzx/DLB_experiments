@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Refresh AAS experiment status, artifacts, checksums, and validation report."""
+# 用法：python3 dlb_07_refresh_experiment.py /path/to/experiment --workers 4
+# 默认 4 路检查；--workers 1 使用串行检查，进度和阶段耗时写入 stderr。
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime,timezone
 from pathlib import Path
+
+from dlb_parallel import add_workers_argument, ordered_checks, timed_phase
 
 from dlb_openbench_state import output_dir,task_state,STATES
 
@@ -18,6 +23,44 @@ def sha256(path:Path)->str:
     with path.open('rb') as stream:
         for block in iter(lambda:stream.read(4*1024*1024),b''):h.update(block)
     return h.hexdigest()
+
+
+def project_state(task)->str:
+    root,project=task
+    config=root/project['config']
+    return task_state(project['project'],config,output_dir(config)/project['project'])
+
+
+def check_config(task)->list[str]:
+    root,path=task
+    text=path.read_text(encoding='utf-8');errors=[]
+    if '__' in text:errors.append(f'unresolved placeholder: {path.relative_to(root)}')
+    for token in ('project:','evaluation:','reference:','simulation:','comparison:'):
+        if token not in text:errors.append(f'{path.relative_to(root)} missing {token}')
+    return errors
+
+
+def check_job(task)->list[str]:
+    root,path=task
+    checked=subprocess.run(['bash','-n',str(path)],capture_output=True,text=True)
+    return [f'bash -n failed: {path.relative_to(root)}'] if checked.returncode else []
+
+
+def artifact_row(task)->dict:
+    root,path=task
+    return {'path':str(path.relative_to(root)),'bytes':path.stat().st_size,'sha256':sha256(path)}
+
+
+def checksum_paths(root:Path)->list[Path]:
+    paths=[]
+    for directory,dirs,files in os.walk(root,followlinks=False):
+        dirs[:]=[name for name in dirs if name not in ('openbench_output','logs')]
+        for name in files:
+            path=Path(directory)/name
+            if (name not in ('checksums.sha256','validation_report.txt','artifacts.yaml') and
+                    'openbench_output' not in path.parts and 'logs' not in path.parts and path.is_file()):
+                paths.append(path)
+    return sorted(paths)
 
 
 def main()->int:
@@ -30,6 +73,7 @@ def main()->int:
                    help='Refresh an experiment with intentional temporary start/end dates')
     p.add_argument('--mark-validated',action='store_true',
                    help='Set validated only when every automatic check already passes')
+    add_workers_argument(p)
     args=p.parse_args()
     root=args.experiment_dir.resolve();manifest_path=root/'manifest.yaml'
     manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
@@ -43,9 +87,11 @@ def main()->int:
     known={x['project'] for x in manifest['evaluation']['projects']}
     unknown=set(updates)-known
     if unknown:raise ValueError('unknown OpenBench projects: '+', '.join(sorted(unknown)))
-    for project in manifest['evaluation']['projects']:
-        name=project['project'];config=root/project['config']
-        state=task_state(name,config,output_dir(config)/name)
+    projects=manifest['evaluation']['projects']
+    states=ordered_checks(project_state,[(root,project) for project in projects],
+                          args.workers,'OpenBench task states')
+    for project,state in zip(projects,states):
+        name=project['project']
         if updates.get(name)=='success' and state!='completed_unchanged':
             raise ValueError(f'cannot mark success without matching successful run record: {name} ({state})')
         project['task_state']=state
@@ -55,28 +101,28 @@ def main()->int:
             if updates[name]!='success':project['status']=updates[name]
 
     status_cmd=[sys.executable,str(Path(__file__).resolve().parent/'dlb_06_stage_status.py'),
-                '--nml-dir',str(root/'config/colm'),'--json']
+                '--nml-dir',str(root/'config/colm'),'--json','--workers',str(args.workers)]
     colm_manifest=json.loads((root/'config/colm/run_manifest.json').read_text(encoding='utf-8'))
     if colm_manifest.get('draft'):status_cmd.append('--allow-draft')
     if args.allow_nonstandard_schedule:status_cmd.append('--allow-nonstandard-schedule')
     if args.jobs_dir:status_cmd.extend(['--jobs-dir',str(args.jobs_dir.resolve())])
-    result=subprocess.run(status_cmd,text=True,capture_output=True,check=False)
-    if result.returncode:raise ValueError(f'stage status failed: {result.stderr or result.stdout}')
+    with timed_phase('CoLM status subprocess'):
+        result=subprocess.run(status_cmd,text=True,stdout=subprocess.PIPE,check=False)
+        if result.returncode:
+            raise ValueError(f'stage status failed (exit {result.returncode}): {result.stderr or result.stdout}')
     stages=json.loads(result.stdout)
     configs=sorted((root/'config/openbench').rglob('*.yaml'))
     expected=len(manifest['evaluation']['projects'])
     config_errors=[]
     if len(configs)!=expected:config_errors.append(f'OpenBench YAML count {len(configs)} != {expected}')
-    for path in configs:
-        text=path.read_text(encoding='utf-8')
-        if '__' in text:config_errors.append(f'unresolved placeholder: {path.relative_to(root)}')
-        for token in ('project:','evaluation:','reference:','simulation:','comparison:'):
-            if token not in text:config_errors.append(f'{path.relative_to(root)} missing {token}')
+    for errors in ordered_checks(check_config,[(root,path) for path in configs],
+                                 args.workers,'YAML checks'):
+        config_errors.extend(errors)
     jobs=sorted((root/'config/jobs').glob('*'))
-    for path in jobs:
-        if path.suffix in ('.lsf','.slurm') or path.name.endswith('.sh'):
-            checked=subprocess.run(['bash','-n',str(path)],capture_output=True,text=True)
-            if checked.returncode:config_errors.append(f'bash -n failed: {path.relative_to(root)}')
+    scripts=[path for path in jobs if path.suffix in ('.lsf','.slurm') or path.name.endswith('.sh')]
+    for errors in ordered_checks(check_job,[(root,path) for path in scripts],
+                                 args.workers,'Shell syntax checks'):
+        config_errors.extend(errors)
     statuses=[x.get('status','missing') for x in manifest['evaluation']['projects']]
     openbench_complete=bool(statuses) and all(x=='success' for x in statuses)
     automatic_ok=stages['colm_complete'] and openbench_complete and not config_errors
@@ -98,17 +144,16 @@ def main()->int:
     manifest_path.write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
 
     artifact_files=[root/'README.md',root/'manifest.yaml',root/'config/colm/run_manifest.json',*configs,*jobs]
-    artifact_rows=[]
-    for path in artifact_files:
-        if path.is_file():artifact_rows.append({'path':str(path.relative_to(root)),'bytes':path.stat().st_size,'sha256':sha256(path)})
+    artifact_rows=ordered_checks(artifact_row,[(root,path) for path in artifact_files if path.is_file()],
+                                 args.workers,'Artifact hashes')
     artifacts={'schema_version':1,'experiment':manifest['name'],'refreshed_at':manifest['refreshed_at'],
                'artifacts':artifact_rows}
     (root/'artifacts.yaml').write_text(json.dumps(artifacts,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
-    checksum_files=[p for p in sorted(root.rglob('*')) if p.is_file() and
-                    p.name not in ('checksums.sha256','validation_report.txt','artifacts.yaml') and
-                    'openbench_output' not in p.parts and 'logs' not in p.parts]
+    with timed_phase('Checksum inventory'):
+        checksum_files=checksum_paths(root)
+    digests=ordered_checks(sha256,checksum_files,args.workers,'Checksum hashes')
     (root/'checksums.sha256').write_text(''.join(
-        f'{sha256(path)}  {path.relative_to(root)}\n' for path in checksum_files),encoding='utf-8')
+        f'{digest}  {path.relative_to(root)}\n' for path,digest in zip(checksum_files,digests)),encoding='utf-8')
     report=['PASS' if automatic_ok else 'INCOMPLETE',f'status: {status}',
         f'spinup_complete: {stages["spinup_complete"]}',f'dam_init_complete: {stages["dam_init_complete"]}',
         f'handoff_complete: {stages["handoff_complete"]}',f'colm_complete: {stages["colm_complete"]}',

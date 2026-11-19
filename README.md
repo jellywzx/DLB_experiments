@@ -1079,6 +1079,23 @@ SHA256 针对生成后 YAML 的原始字节，因此注释/排版变更也会触
 
 ## 13. 刷新实验记录
 
+`dlb_08` 生成配置后会自动调用 `dlb_07` 刷新，其中的 CoLM 状态检查由 `dlb_06` 执行。
+三个脚本均支持 `--workers N`，默认 4 路；`--workers 1` 使用串行路径。
+CoLM 状态检查使用独立进程，文件检查及哈希使用线程；不同阶段依次执行。
+进度与阶段耗时实时写入 stderr，`dlb_06 --json` 的 stdout 仍可直接解析。
+
+```bash
+# 默认 4 路；如需调整并发数量，参数会沿刷新链路传递
+python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite --workers 8
+# 直接刷新，或用 1 路降低共享存储压力
+python3 "$DLB_ROOT/dlb_07_refresh_experiment.py" "$EXP_DIR" --workers 1
+```
+
+`--workers` 控制配置管理和状态检查，不修改 YAML 的 OpenBench 评估核心数，
+也不修改 `dlb_09 --cores`。YAML 生成、备份及配置替换仍按原事务流程串行执行。
+提高并发数的效果取决于共享存储性能，可根据阶段计时调整；不保证同比提速。
+
+
 只刷新当前文件状态：
 
 ```bash

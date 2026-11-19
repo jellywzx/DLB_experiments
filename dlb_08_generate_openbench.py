@@ -1,5 +1,33 @@
 #!/usr/bin/env python3
 """Generate or atomically replace OpenBench YAML for one DLB experiment."""
+
+# 用法示例（在 shell 中执行，各示例按需选择）：
+#   DLB_ROOT=/share/home/dq134/wzx/DLB_experiments
+#   EXP_DIR=/path/to/experiment  # 替换为已有实验目录，需包含 manifest.yaml
+# 使用支持脚本语法的 Python 环境，例如先激活 OpenBench 环境。
+#
+# 1. 首次生成前预览：不写文件、不刷新实验状态。
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --dry-run
+# 2. 首次生成：从 templates/openbench/ 的全部模板生成配置。
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR"
+# 3. 已有配置时，先预览，再整体重新生成（会备份并替换原配置目录）。
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite --dry-run
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite
+# 4. 只补齐指定模板的缺失配置，保留已有配置和其他模板配置。
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --templates dam_inflow dam_outflow dam_storage
+# 5. 只新增或覆盖储量模板配置，保留其他模板配置。
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --templates dam_storage --overwrite --dry-run
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --templates dam_storage --overwrite
+# 6. 指定评估年份（2000 <= 起始年 <= 结束年 <= 2005；spinup 固定为 1996–1999）。
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --eval-start-year 2001 --eval-end-year 2005 --overwrite
+#
+# 配置输出到 $EXP_DIR/config/openbench/；本脚本只生成配置，不运行 OpenBench。
+# --templates 接受模板名或文件名；自定义模板目录用 --template-dir /path/to/templates。
+# 未指定 --templates 时，已有配置需加 --overwrite，该选项会整体替换配置目录。
+# 默认使用 4 路刷新检查；--workers 只控制管理检查，不改变 OpenBench 评估核心数。
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite --workers 8
+#   python3 "$DLB_ROOT/dlb_08_generate_openbench.py" "$EXP_DIR" --overwrite --workers 1
+# 更多参数：python3 "$DLB_ROOT/dlb_08_generate_openbench.py" --help
 from __future__ import annotations
 
 import argparse
@@ -15,6 +43,8 @@ from datetime import datetime,timezone
 from pathlib import Path
 
 import yaml
+
+from dlb_parallel import add_workers_argument, timed_phase
 
 from dlb_site_config import parse_site_args,basin_specs
 
@@ -183,101 +213,103 @@ def main()->int:
     p.add_argument('--overwrite',action='store_true',
                    help='Replace selected YAMLs with --templates; otherwise replace all OpenBench configuration')
     p.add_argument('--mask-root',type=Path,help='Basin masks; default from recorded server configuration')
+    add_workers_argument(p)
     args=parse_site_args(p,use_env=False)  # Existing experiment keeps its recorded mask root
-    templates=load_templates(args.template_dir,args.templates)
-    selective=args.templates is not None
-    root=args.experiment_dir.resolve();manifest_path=root/'manifest.yaml'
-    if not manifest_path.is_file():raise ValueError(f'missing experiment manifest: {manifest_path}')
-    manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
-    region=manifest['region'];name=manifest['name']
-    if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*',name):
-        raise ValueError(f'unsafe experiment name: {name!r}')
-    if region not in BASINS:raise ValueError(f'unsupported region: {region}')
-    colm_path=root/manifest['configuration']['colm']
-    colm=json.loads(colm_path.read_text(encoding='utf-8'))
-    default_eval=manifest.get('evaluation',{})
-    start=args.eval_start_year if args.eval_start_year is not None else default_eval.get('start_year',2001)
-    end=args.eval_end_year if args.eval_end_year is not None else default_eval.get('end_year',2005)
-    if not 2000<=start<=end<=2005:raise ValueError('evaluation years must be within 2000–2005')
-    saved=manifest.get('site_config',{}).get('effective',{})
-    mask_root=args.mask_root or Path(default_eval.get('mask_root',saved.get('mask_root',MASK_ROOT)))
-    basins=basin_specs(BASINS,region,mask_root,MASK_ROOT)
-    mask_issues=[f'missing basin mask: {mask}' for _,_,_,mask in basins if mask and not mask.is_file()]
-    if mask_issues and not colm.get('draft'):raise ValueError('\n'.join(mask_issues))
-    for issue in mask_issues:print('WARNING [draft]: '+issue,file=sys.stderr)
-    case_root=Path(colm['paths']['case_root'])
-    runs=colm['runs']['experiments'][region]
-    labels=[x['label'] for x in runs]
-    if len(labels)!=len(set(labels)):raise ValueError('duplicate CoLM experiment labels')
-    missing={'E0_CTL',*TREATMENTS}-set(labels)
-    if missing:raise ValueError('missing CoLM experiments: '+', '.join(sorted(missing)))
-    by_label={x['label']:{'label':x['label'],'history_root':case_root/x['case']/'history',
-                          'prefix':x['case']+'_hist_unitcat_'} for x in runs}
-    spinup=colm['runs']['spinup'][region]
-    spinup_run={'label':'spinup','history_root':case_root/spinup['case']/'history',
-                'prefix':spinup['case']+'_hist_unitcat_'}
-    output_root=(args.output_root.resolve() if args.output_root else root/'openbench_output')
-    destination=root/'config/openbench'
-    has_existing=destination.exists() and any(destination.iterdir())
-    if has_existing and not args.overwrite and not selective:
-        raise ValueError(f'OpenBench configuration already exists: {destination}; use --overwrite')
-    old_projects=(project_index(default_eval.get('projects',[]),root) if selective else
-                  {x['project']:x for x in default_eval.get('projects',[])})
-    old_paths={(root/item['config']).resolve():name for name,item in old_projects.items()}
-    projects=[];grid=0.25 if region=='Global' else 0.1
-    combinations=[('DLB' if label=='E7_ALL' else label.split('_',1)[1],label,
-                   [by_label[label],by_label['E0_CTL']],(start,end)) for label in TREATMENTS]
-    combinations.extend([('spinup','spinup',[spinup_run],(1996,1999)),
-                         ('ctl','ctl',[by_label['E0_CTL']],(start,end)),
-                         ('comparisons','comparisons',
-                          [by_label[label] for label in ('E0_CTL',*TREATMENTS)],(start,end))])
-    seen_projects=set();seen_configs=set();seen_outputs=set();plans=[]
-    for basin in basins:
-        for short,label,selected_runs,years in combinations:
-            for kind,template in templates.items():
-                project=f'{name}_{basin[0]}_{kind}_{short}'
-                filename=f'{kind}_{short}.yaml'
-                relative=f'config/openbench/{basin[0]}/{filename}'
-                result_dir=output_root/project
-                for value,seen in ((project,seen_projects),(relative,seen_configs),(result_dir,seen_outputs)):
-                    if value in seen:raise ValueError(f'output naming conflict: {value}')
-                    seen.add(value)
-                config=openbench_config(template,project,output_root,years,grid,basin,selected_runs)
-                text=yaml.safe_dump(config,sort_keys=False,allow_unicode=True)
-                old=old_projects.get(project,{});old_config=root/old.get('config','')
-                path=root/relative
-                if selective:
-                    if (old and old_config.resolve()!=path.resolve()) or old_paths.get(path.resolve(),project)!=project:
-                        raise ValueError(f'project name/config path conflict: {project}')
-                    if path.exists() and not old:
-                        raise ValueError(f'existing YAML has no project registration: {path}')
-                action='SKIP' if selective and path.exists() and not args.overwrite else (
-                    'OVERWRITE' if path.exists() else 'ADD')
-                if selective and action!='SKIP' and any(
-                    (destination/part).is_symlink() for part in
-                    [Path('.'),*Path(relative).relative_to('config/openbench').parents,
-                     Path(relative).relative_to('config/openbench')]):
-                    raise ValueError(f'refusing to write through a symlink: {path}')
-                item=copy.deepcopy(old) if selective else {}
-                same=old_config.is_file() and old_config.read_text(encoding='utf-8')==text
-                if action!='SKIP':
-                    item.update(project=project,config=relative,output_dir=str(result_dir),
-                                basin=basin[0],type=kind,treatment=label,
-                                status=old.get('status','missing') if same else 'missing')
-                    if not same:
-                        item.pop('task_state',None);item.pop('manual_status',None)
-                projects.append(item)
-                plans.append((action,relative,text))
-    expected=len(basins)*len(templates)*len(combinations)
-    if len(plans)!=expected:raise ValueError(f'internal YAML count error: {len(plans)} != {expected}')
-    if selective:
-        target_paths={(root/relative).resolve() for _,relative,_ in plans}
-        check_existing_projects(old_projects,root,target_paths)
-        merged=dict(old_projects)
-        for item in projects:
-            merged[item['project']]=item
-        projects=list(merged.values())
-        project_index(projects,root)
+    with timed_phase('Configuration planning'):
+        templates=load_templates(args.template_dir,args.templates)
+        selective=args.templates is not None
+        root=args.experiment_dir.resolve();manifest_path=root/'manifest.yaml'
+        if not manifest_path.is_file():raise ValueError(f'missing experiment manifest: {manifest_path}')
+        manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
+        region=manifest['region'];name=manifest['name']
+        if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*',name):
+            raise ValueError(f'unsafe experiment name: {name!r}')
+        if region not in BASINS:raise ValueError(f'unsupported region: {region}')
+        colm_path=root/manifest['configuration']['colm']
+        colm=json.loads(colm_path.read_text(encoding='utf-8'))
+        default_eval=manifest.get('evaluation',{})
+        start=args.eval_start_year if args.eval_start_year is not None else default_eval.get('start_year',2001)
+        end=args.eval_end_year if args.eval_end_year is not None else default_eval.get('end_year',2005)
+        if not 2000<=start<=end<=2005:raise ValueError('evaluation years must be within 2000–2005')
+        saved=manifest.get('site_config',{}).get('effective',{})
+        mask_root=args.mask_root or Path(default_eval.get('mask_root',saved.get('mask_root',MASK_ROOT)))
+        basins=basin_specs(BASINS,region,mask_root,MASK_ROOT)
+        mask_issues=[f'missing basin mask: {mask}' for _,_,_,mask in basins if mask and not mask.is_file()]
+        if mask_issues and not colm.get('draft'):raise ValueError('\n'.join(mask_issues))
+        for issue in mask_issues:print('WARNING [draft]: '+issue,file=sys.stderr)
+        case_root=Path(colm['paths']['case_root'])
+        runs=colm['runs']['experiments'][region]
+        labels=[x['label'] for x in runs]
+        if len(labels)!=len(set(labels)):raise ValueError('duplicate CoLM experiment labels')
+        missing={'E0_CTL',*TREATMENTS}-set(labels)
+        if missing:raise ValueError('missing CoLM experiments: '+', '.join(sorted(missing)))
+        by_label={x['label']:{'label':x['label'],'history_root':case_root/x['case']/'history',
+                              'prefix':x['case']+'_hist_unitcat_'} for x in runs}
+        spinup=colm['runs']['spinup'][region]
+        spinup_run={'label':'spinup','history_root':case_root/spinup['case']/'history',
+                    'prefix':spinup['case']+'_hist_unitcat_'}
+        output_root=(args.output_root.resolve() if args.output_root else root/'openbench_output')
+        destination=root/'config/openbench'
+        has_existing=destination.exists() and any(destination.iterdir())
+        if has_existing and not args.overwrite and not selective:
+            raise ValueError(f'OpenBench configuration already exists: {destination}; use --overwrite')
+        old_projects=(project_index(default_eval.get('projects',[]),root) if selective else
+                      {x['project']:x for x in default_eval.get('projects',[])})
+        old_paths={(root/item['config']).resolve():name for name,item in old_projects.items()}
+        projects=[];grid=0.25 if region=='Global' else 0.1
+        combinations=[('DLB' if label=='E7_ALL' else label.split('_',1)[1],label,
+                       [by_label[label],by_label['E0_CTL']],(start,end)) for label in TREATMENTS]
+        combinations.extend([('spinup','spinup',[spinup_run],(1996,1999)),
+                             ('ctl','ctl',[by_label['E0_CTL']],(start,end)),
+                             ('comparisons','comparisons',
+                              [by_label[label] for label in ('E0_CTL',*TREATMENTS)],(start,end))])
+        seen_projects=set();seen_configs=set();seen_outputs=set();plans=[]
+        for basin in basins:
+            for short,label,selected_runs,years in combinations:
+                for kind,template in templates.items():
+                    project=f'{name}_{basin[0]}_{kind}_{short}'
+                    filename=f'{kind}_{short}.yaml'
+                    relative=f'config/openbench/{basin[0]}/{filename}'
+                    result_dir=output_root/project
+                    for value,seen in ((project,seen_projects),(relative,seen_configs),(result_dir,seen_outputs)):
+                        if value in seen:raise ValueError(f'output naming conflict: {value}')
+                        seen.add(value)
+                    config=openbench_config(template,project,output_root,years,grid,basin,selected_runs)
+                    text=yaml.safe_dump(config,sort_keys=False,allow_unicode=True)
+                    old=old_projects.get(project,{});old_config=root/old.get('config','')
+                    path=root/relative
+                    if selective:
+                        if (old and old_config.resolve()!=path.resolve()) or old_paths.get(path.resolve(),project)!=project:
+                            raise ValueError(f'project name/config path conflict: {project}')
+                        if path.exists() and not old:
+                            raise ValueError(f'existing YAML has no project registration: {path}')
+                    action='SKIP' if selective and path.exists() and not args.overwrite else (
+                        'OVERWRITE' if path.exists() else 'ADD')
+                    if selective and action!='SKIP' and any(
+                        (destination/part).is_symlink() for part in
+                        [Path('.'),*Path(relative).relative_to('config/openbench').parents,
+                         Path(relative).relative_to('config/openbench')]):
+                        raise ValueError(f'refusing to write through a symlink: {path}')
+                    item=copy.deepcopy(old) if selective else {}
+                    same=old_config.is_file() and old_config.read_text(encoding='utf-8')==text
+                    if action!='SKIP':
+                        item.update(project=project,config=relative,output_dir=str(result_dir),
+                                    basin=basin[0],type=kind,treatment=label,
+                                    status=old.get('status','missing') if same else 'missing')
+                        if not same:
+                            item.pop('task_state',None);item.pop('manual_status',None)
+                    projects.append(item)
+                    plans.append((action,relative,text))
+        expected=len(basins)*len(templates)*len(combinations)
+        if len(plans)!=expected:raise ValueError(f'internal YAML count error: {len(plans)} != {expected}')
+        if selective:
+            target_paths={(root/relative).resolve() for _,relative,_ in plans}
+            check_existing_projects(old_projects,root,target_paths)
+            merged=dict(old_projects)
+            for item in projects:
+                merged[item['project']]=item
+            projects=list(merged.values())
+            project_index(projects,root)
     for action,relative,_ in plans:print(f'{action} {relative}')
     counts={action:sum(item[0]==action for item in plans) for action in ('ADD','OVERWRITE','SKIP')}
     print(f'Plan: add={counts["ADD"]} overwrite={counts["OVERWRITE"]} skip={counts["SKIP"]}')
@@ -288,19 +320,21 @@ def main()->int:
     destination.parent.mkdir(parents=True,exist_ok=True)
     temporary=Path(tempfile.mkdtemp(prefix='.openbench.',dir=str(destination.parent)))
     try:
-        if selective and destination.exists():shutil.copytree(destination,temporary,dirs_exist_ok=True,symlinks=True)
-        for action,relative,text in plans:
-            if action=='SKIP':continue
-            path=temporary/Path(relative).relative_to('config/openbench')
-            path.parent.mkdir(parents=True,exist_ok=True)
-            path.write_text(text,encoding='utf-8')
+        with timed_phase('Configuration staging'):
+            if selective and destination.exists():shutil.copytree(destination,temporary,dirs_exist_ok=True,symlinks=True)
+            for action,relative,text in plans:
+                if action=='SKIP':continue
+                path=temporary/Path(relative).relative_to('config/openbench')
+                path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_text(text,encoding='utf-8')
         backup=None
         if has_existing:
-            stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-            backup=root/'provenance/backups'/stamp
-            backup.mkdir(parents=True)
-            shutil.copytree(destination,backup/'openbench',symlinks=True)
-            shutil.copy2(manifest_path,backup/'manifest.yaml')
+            with timed_phase('Configuration backup'):
+                stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+                backup=root/'provenance/backups'/stamp
+                backup.mkdir(parents=True)
+                shutil.copytree(destination,backup/'openbench',symlinks=True)
+                shutil.copy2(manifest_path,backup/'manifest.yaml')
         old_dir=None
         if destination.exists():
             old_dir=destination.with_name(f'.openbench.old.{os.getpid()}')
@@ -335,9 +369,11 @@ def main()->int:
               'Existing evaluation results are preserved; inspect pending projects before submitting.',file=sys.stderr)
     if not args.no_refresh:
         refresh=Path(__file__).resolve().parent/'dlb_07_refresh_experiment.py'
-        result=subprocess.run([sys.executable,str(refresh),str(root)],text=True,
-                              capture_output=True,check=False)
-        if result.returncode:raise ValueError(f'refresh failed: {result.stderr or result.stdout}')
+        with timed_phase('Experiment refresh'):
+            result=subprocess.run([sys.executable,str(refresh),str(root),'--workers',str(args.workers)],
+                                  text=True,stdout=subprocess.PIPE,check=False)
+            if result.returncode:
+                raise ValueError(f'refresh failed (exit {result.returncode}): {result.stderr or result.stdout}')
         print(result.stdout.strip())
     return 0
 
