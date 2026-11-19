@@ -83,6 +83,19 @@ both --river-detail and --station-trace are none.
    此处追踪表示拓扑连通范围，不计算泥沙影响强度、传播时间或衰减。
    追踪匹配还需要 scipy；日志记录站点匹配 seq、距离及上下游河段数。
 
+7. 针对每个站点单独出图：
+
+    python export_sediment_station_info.py --config /path/to/config.yaml --per-station
+    python export_sediment_station_info.py --config /path/to/config.yaml --per-station --station-trace all --format both
+    python export_sediment_station_info.py --config /path/to/config.yaml --per-station --station-trace selected --highlight-station STATION_A --highlight-station STATION_B
+
+   --per-station 将合并站点地图替换为逐站地图，每张图只标注当前站点。
+   未追踪或 station-trace=all 时处理全部评估站点；selected 时仅处理指定站点。
+   开启追踪时，各站独立追踪上下游，并分别输出原范围图和 __full_trace 图。
+   配置中的经纬度范围仍用于原范围图；未配置时按当前站点自动计算范围。
+   文件名增加 __station__<安全编码的站点ID>，重复 ID 附加行号避免覆盖。
+   站点 CSV 仍为完整评估站点表，仅导出一份，不增加逐站 CSV。
+
 查看全部参数：
 
     python export_sediment_station_info.py --help
@@ -826,6 +839,30 @@ def _validate_trace_options(args: argparse.Namespace) -> None:
         raise ValueError("--station-match-max-km must be a finite positive number")
 
 
+def _station_map_groups(stations: pd.DataFrame, args: argparse.Namespace):
+    """Yield independent map tables with safe, distinct filename suffixes."""
+    if not args.per_station:
+        yield stations, "", ""
+        return
+    ids = stations["station_id"].astype(str)
+    rows = np.arange(len(stations))
+    if args.station_trace == "selected":
+        missing = sorted(set(args.highlight_station) - set(ids))
+        if missing:
+            raise ValueError(f"Highlighted station IDs not found in this evaluation: {missing}")
+        rows = np.flatnonzero(ids.isin(args.highlight_station))
+    if not len(rows):
+        raise ValueError("No stations available for per-station maps")
+    duplicates = ids.duplicated(keep=False)
+    for row in rows:
+        station_id = ids.iloc[row]
+        components = ["station", station_id]
+        if duplicates.iloc[row]:
+            components.append(f"row{row + 1}")
+        suffix = "__" + join_filename_components(*components)
+        yield stations.iloc[[row]].reset_index(drop=True), suffix, f" | Station {station_id}"
+
+
 def export(args: argparse.Namespace) -> list[tuple[Path, list[Path]]]:
     _validate_trace_options(args)
     from openbench.cli.run import _expand_config_paths
@@ -894,51 +931,52 @@ def export(args: argparse.Namespace) -> list[tuple[Path, list[Path]]]:
 
             formats = ("png", "pdf") if args.format == "both" else (args.format,)
             figure_paths = []
-            extent = None
+            configured_extent = None
             if cfg.project.lon_range is not None and cfg.project.lat_range is not None:
-                extent = (
+                configured_extent = (
                     float(cfg.project.lon_range[0]), float(cfg.project.lon_range[1]),
                     float(cfg.project.lat_range[0]), float(cfg.project.lat_range[1]),
                 )
-            if extent is None:
-                extent = _station_extent(stations)
             tracing = args.station_trace != "none"
             if args.river_detail != "none" or tracing:
                 if routing_network is None:
                     routing_network = load_routing_network(
                         Path(args.routing_file).expanduser().resolve(), trace=tracing,
                     )
-            station_trace = None
-            views = [(extent, "")]
-            if tracing:
-                station_trace = trace_station_network(
-                    stations, routing_network.topology,
-                    args.highlight_station if args.station_trace == "selected" else None,
-                    args.station_match_max_km,
-                )
-                views.append((_full_trace_extent(extent, station_trace), "__full_trace"))
-            _atomic_csv(stations, csv_path)
-            for view_extent, suffix in views:
-                river_segments = None
-                if args.river_detail != "none":
-                    if view_extent not in river_cache:
-                        river_cache[view_extent] = select_river_segments(routing_network, args.river_detail, view_extent)
-                    river_segments = river_cache[view_extent]
-                for image_format in formats:
-                    figure_path = output_dir / f"{stem}__station_map{suffix}.{image_format}"
-                    plot_station_map(
-                        stations,
-                        figure_path,
-                        title=f"{resolved.var_name} | {resolved.resolved_name} | {simulation}"
-                              + (" | Full routing trace" if suffix else ""),
-                        extent=view_extent,
-                        dpi=args.dpi,
-                        label_fontsize=args.label_fontsize,
-                        river_segments=river_segments,
-                        river_detail=args.river_detail,
-                        station_trace=station_trace,
+            for map_stations, station_suffix, title_suffix in _station_map_groups(stations, args):
+                extent = configured_extent if configured_extent is not None else _station_extent(map_stations)
+                station_trace = None
+                views = [(extent, "")]
+                if tracing:
+                    station_trace = trace_station_network(
+                        map_stations, routing_network.topology,
+                        args.highlight_station if args.station_trace == "selected" and not args.per_station else None,
+                        args.station_match_max_km,
                     )
-                    figure_paths.append(figure_path)
+                    views.append((_full_trace_extent(extent, station_trace), "__full_trace"))
+                if not figure_paths:
+                    _atomic_csv(stations, csv_path)
+                for view_extent, suffix in views:
+                    river_segments = None
+                    if args.river_detail != "none":
+                        if view_extent not in river_cache:
+                            river_cache[view_extent] = select_river_segments(routing_network, args.river_detail, view_extent)
+                        river_segments = river_cache[view_extent]
+                    for image_format in formats:
+                        figure_path = output_dir / f"{stem}__station_map{station_suffix}{suffix}.{image_format}"
+                        plot_station_map(
+                            map_stations,
+                            figure_path,
+                            title=f"{resolved.var_name} | {resolved.resolved_name} | {simulation}"
+                                  + title_suffix + (" | Full routing trace" if suffix else ""),
+                            extent=view_extent,
+                            dpi=args.dpi,
+                            label_fontsize=args.label_fontsize,
+                            river_segments=river_segments,
+                            river_detail=args.river_detail,
+                            station_trace=station_trace,
+                        )
+                        figure_paths.append(figure_path)
             outputs.append((csv_path, figure_paths))
     if not outputs:
         raise RuntimeError("No matching sediment evaluation outputs were found")
@@ -967,6 +1005,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Exported station_id to trace; repeatable, requires --station-trace selected")
     parser.add_argument("--station-match-max-km", type=float, default=10.0,
                         help="Maximum station-to-routing-node matching distance in km (default: 10)")
+    parser.add_argument("--per-station", action="store_true",
+                        help="Output a separate map for each station (selected IDs only in selected trace mode)")
     return parser
 
 

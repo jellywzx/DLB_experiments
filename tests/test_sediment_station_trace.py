@@ -210,11 +210,16 @@ class StationTraceTests(unittest.TestCase):
             "openbench.data.registry.manager": NS(get_registry=lambda: None),
             "openbench.data.station_matcher": NS(resolve_station_dataset=lambda *a: self.path),
         }
-        for mode in ("none", "all", "selected"):
+        for mode, per_station in (("none", False), ("all", False), ("selected", False),
+                                  ("none", True), ("all", True), ("selected", True)):
+            label = mode + ("_per_station" if per_station else "")
+            cfg.project.lon_range = None if per_station and mode == "none" else [-1, 1]
+            cfg.project.lat_range = None if per_station and mode == "none" else [-1, 1]
             args = exporter.build_parser().parse_args([
-                "--config", "dummy.yaml", "--output-dir", str(self.root / mode),
+                "--config", "dummy.yaml", "--output-dir", str(self.root / label),
                 "--routing-file", str(self.path), "--station-trace", mode, "--river-detail", "none",
                 "--format", "both", *(["--highlight-station", "A"] if mode == "selected" else []),
+                *(["--per-station"] if per_station else []),
             ])
             with patch.dict(sys.modules, modules), \
                  patch.object(exporter, "_case_dir", return_value=self.root), \
@@ -226,22 +231,57 @@ class StationTraceTests(unittest.TestCase):
                  patch.object(exporter, "trace_station_network", wraps=exporter.trace_station_network) as trace, \
                  patch.object(exporter, "plot_station_map", return_value=2) as plot:
                 outputs = exporter.export(args)
+                map_count = 2 if per_station and mode != "selected" else 1
+                views = 1 if mode == "none" else 2
                 self.assertEqual(load.call_count, 0 if mode == "none" else 1)
-                self.assertEqual(trace.call_count, 0 if mode == "none" else 2)
-                self.assertEqual(plot.call_count, 4 if mode == "none" else 8)
+                self.assertEqual(trace.call_count, 0 if mode == "none" else 2 * map_count)
+                self.assertEqual(plot.call_count, 4 * map_count * views)
                 for csv_path, figures in outputs:
                     self.assertEqual(pd.read_csv(csv_path).station_id.tolist(), ["A", "B"])
-                    self.assertEqual(len(figures), 2 if mode == "none" else 4)
+                    self.assertEqual(len(figures), 2 * map_count * views)
+                    self.assertEqual(len(set(figures)), len(figures))
                     if mode != "none":
-                        self.assertTrue(all("__full_trace" in p.name for p in figures[2:]))
+                        for group in range(map_count):
+                            self.assertTrue(all("__full_trace" in p.name for p in figures[4 * group + 2:4 * group + 4]))
+                if per_station:
+                    for call in plot.call_args_list:
+                        self.assertEqual(len(call.args[0]), 1)
+                        self.assertIn("__station__", call.args[1].name)
+                        if mode != "none":
+                            self.assertEqual(call.kwargs["station_trace"].station_rows.tolist(), [0])
+                            self.assertEqual(len(call.kwargs["station_trace"].layers["both"]), 0)
+                        if mode == "selected":
+                            self.assertEqual(call.args[0].station_id.tolist(), ["A"])
                 self.assertEqual(plot.call_args_list[0].kwargs["extent"], (-1, 1, -1, 1))
+                if per_station and mode == "none":
+                    self.assertEqual(plot.call_args_list[2].kwargs["extent"], (1, 3, -1, 1))
                 if mode != "none":
                     calls = plot.call_args_list
                     self.assertIs(calls[0].kwargs["station_trace"], calls[3].kwargs["station_trace"])
                     self.assertLess(calls[2].kwargs["extent"][0], -6)
         for baseline in (self.root / "none").glob("*.csv"):
-            for mode in ("all", "selected"):
+            for mode in ("all", "selected", "none_per_station", "all_per_station", "selected_per_station"):
                 self.assertEqual(baseline.read_bytes(), (self.root / mode / baseline.name).read_bytes())
+
+    def test_per_station_safe_filenames_and_duplicate_ids(self):
+        stations = self.table(["A/B", "A:B", "duplicate", "duplicate"], [0, 1, 2, 3], [0] * 4)
+        args = exporter.build_parser().parse_args(["--config", "dummy", "--per-station"])
+        groups = list(exporter._station_map_groups(stations, args))
+        suffixes = [suffix for _, suffix, _ in groups]
+        self.assertEqual(len(set(suffixes)), 4)
+        self.assertTrue(all("/" not in name and ":" not in name for name in suffixes))
+        for frame, _, _ in groups:
+            self.assertEqual(frame.index.tolist(), [0])
+            self.assertEqual(len(frame), 1)
+        self.assertEqual([frame.station_id.iloc[0] for frame, _, _ in groups], stations.station_id.tolist())
+
+    def test_per_station_missing_selected_id(self):
+        args = exporter.build_parser().parse_args([
+            "--config", "dummy", "--per-station", "--station-trace", "selected",
+            "--highlight-station", "missing",
+        ])
+        with self.assertRaisesRegex(ValueError, "not found.*missing"):
+            list(exporter._station_map_groups(self.stations, args))
 
     def test_png_pdf_rendering_preserves_clipped_crossing_edges(self):
         from cartopy.io import Downloader
