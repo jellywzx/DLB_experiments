@@ -277,6 +277,30 @@ class ExperimentTemplateTests(unittest.TestCase):
                 '--experiments-root',str(root/'experiments'),'--draft',ok=False)
             self.assertNotEqual(duplicate.returncode,0)
 
+    def test_openbench_entries_created_without_active_environment(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);exp=root/'experiment';env=os.environ.copy()
+            env.pop('DLB_SITE_CONFIG',None);env['PATH']='/usr/bin:/bin'
+            run(str(TOOLS/'dlb_01_create_experiment.py'),'EXP964','entries','Global',
+                '--repo-root',str(REPO),'--case-root',str(root/'cases'),
+                '--output-dir',str(exp),'--draft',env=env)
+            entries=list((exp/'config/openbench_jobs').glob('*.sh'))
+            self.assertEqual(len(entries),11)
+            self.assertFalse(list((exp/'config/openbench_jobs').glob('*.lsf')))
+            artifacts={item['path'] for item in json.loads((exp/'artifacts.yaml').read_text())['artifacts']}
+            checksums=(exp/'checksums.sha256').read_text()
+            for entry in entries:
+                self.assertIn(str(entry.relative_to(exp)),artifacts)
+                self.assertIn(str(entry.relative_to(exp)),checksums)
+                self.assertNotIn(str(exp.parent/'.EXP964'),entry.read_text())
+            moved=root/'moved experiment';exp.rename(moved)
+            # Even after rename, the helper locates the final experiment rather than staging.
+            result=subprocess.run(['bash',str(moved/'config/openbench_jobs/submit_openbench_all.sh'),
+                                   '--retry-failed'],text=True,capture_output=True,env=env,cwd='/tmp')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('selected=60 pending=0',result.stdout)
+            self.assertIn(str(moved/'config/openbench_jobs'),result.stdout)
+
     def test_legacy_flat_command(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);cases=root/'cases';cases.mkdir();output=root/'flat'

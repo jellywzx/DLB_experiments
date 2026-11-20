@@ -8,7 +8,7 @@ Regional CoLM DLB factorial suite. Creation only rendered configuration; it did 
 2. After spinup validation: `python __TOOLS_DIR__/dlb_05_restart_handoff.py prepare-dam-init --nml-dir config/colm --apply`.
 3. Submit `dam-init`, validate it, then run the handoff dry-run and explicit `--apply`.
 4. Submit `experiments`.
-5. For each OpenBench YAML: `openbench check CONFIG.yaml` then `openbench run CONFIG.yaml`.
+5. Activate the OpenBench environment; preview `bash config/openbench_jobs/submit_openbench_all.sh`, then explicitly add `--submit`.
 6. Record OpenBench results and refresh metadata with `python __TOOLS_DIR__/dlb_07_refresh_experiment.py __EXP_DIR__`.
 
 ## Regenerate one component
@@ -19,3 +19,28 @@ Regional CoLM DLB factorial suite. Creation only rendered configuration; it did 
 Both commands back up the replaced configuration under `provenance/backups/`.
 
 No scheduler dependency is created automatically.
+
+## OpenBench submission entries
+
+Creation generates 11 `.sh` entries in `config/openbench_jobs/` without requiring
+OpenBench to be installed or active. Entries locate this experiment from their own directory.
+
+- Per group: `submit_openbench_D.sh`, `submit_openbench_L.sh`, `submit_openbench_B.sh`, `submit_openbench_DL.sh`, `submit_openbench_DB.sh`, `submit_openbench_LB.sh`, `submit_openbench_DLB.sh`, `submit_openbench_ctl.sh`, `submit_openbench_spinup.sh`, `submit_openbench_comparisons.sh`.
+- All ten groups: `submit_openbench_all.sh` submits one combined array, including ctl, spinup and comparisons. Choose either all or individual groups for the same tasks to avoid duplicate submissions.
+
+```bash
+bash config/openbench_jobs/submit_openbench_D.sh --dry-run
+bash config/openbench_jobs/submit_openbench_D.sh --submit
+bash config/openbench_jobs/submit_openbench_all.sh --dry-run
+bash config/openbench_jobs/submit_openbench_all.sh --submit
+```
+
+Default mode is preview. Only `--submit` calls LSF `bsub`; `--dry-run` and `--submit`
+are mutually exclusive. Activate OpenBench first or pass `--openbench-exe /path/to/openbench`.
+Entries accept resource options, `--out-dir`, `--log-dir`, `--overwrite`,
+`--retry-failed` and `--rerun-unverified`; experiment selectors are fixed.
+OpenBench resources use `dlb_09` defaults or invocation options, independently of CoLM.
+Existing array snapshots retain their resources unless regenerated with `--overwrite`.
+The `.lsf`, mapping and snapshot are generated/reused when an entry runs.
+`--out-dir` changes array output only; entries stay in `config/openbench_jobs/`.
+Existing identical entries are reused; different content requires `--overwrite`.

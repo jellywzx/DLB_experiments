@@ -118,7 +118,8 @@ def main()->int:
     for errors in ordered_checks(check_config,[(root,path) for path in configs],
                                  args.workers,'YAML checks'):
         config_errors.extend(errors)
-    jobs=sorted((root/'config/jobs').glob('*'))
+    jobs=sorted([*(root/'config/jobs').glob('*'),
+                 *(root/'config/openbench_jobs').glob('*')])
     scripts=[path for path in jobs if path.suffix in ('.lsf','.slurm') or path.name.endswith('.sh')]
     for errors in ordered_checks(check_job,[(root,path) for path in scripts],
                                  args.workers,'Shell syntax checks'):

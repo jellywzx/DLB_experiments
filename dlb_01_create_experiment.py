@@ -15,6 +15,7 @@ from pathlib import Path
 
 from dlb_site_config import parse_site_args,basin_specs,input_issues
 from dlb_08_generate_openbench import BASINS,MASK_ROOT
+from dlb_09_submit_openbench import generate_submit_entries
 
 DEFAULT_ROOT=Path('/share/home/dq134/wzx/CoLM/DLB_nml')
 DEFAULT_REPO_ROOT=Path('/share/home/dq134/wzx/CoLM/CoLM202X_1030')
@@ -161,6 +162,7 @@ def main()->int:
                      '--eval-start-year',str(args.eval_start_year),
                      '--eval-end-year',str(args.eval_end_year),
                      '--output-root',str(target/'openbench_output'),'--mask-root',str(args.mask_root),'--no-refresh'])
+        entries=generate_submit_entries(staging)
         expected=len(json.loads((staging/'manifest.yaml').read_text())['evaluation']['projects'])
         (staging/'provenance/site_config.json').write_text(json.dumps(args.site_metadata,indent=2)+'\n')
         (staging/'provenance/input_validation.txt').write_text(
@@ -174,7 +176,8 @@ def main()->int:
                 text=path.read_text(encoding='utf-8',errors='strict')
                 if str(staging) in text:
                     path.write_text(text.replace(str(staging),str(target)),encoding='utf-8')
-        for job in (staging/'config/jobs').glob('*'):
+        for job in [*(staging/'config/jobs').glob('*'),
+                    *(staging/'config/openbench_jobs').glob('*')]:
             if job.suffix in ('.lsf','.slurm') or job.name.endswith('.sh'):
                 result=subprocess.run(['bash','-n',str(job)],capture_output=True,text=True)
                 if result.returncode:fail(f'bash syntax error {job}: {result.stderr}')
@@ -189,7 +192,7 @@ def main()->int:
         raise
     print(f'Created {target}')
     print(f'Cases were checked for collisions but not created under {case_root}.')
-    print(f'Generated {expected} OpenBench YAML files; no jobs were submitted.')
+    print(f'Generated {expected} OpenBench YAML files and {len(entries)} submission entries; no jobs were submitted.')
     return 0
 
 

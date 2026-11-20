@@ -813,6 +813,40 @@ openbench run "$EXP_DIR/config/openbench/mekong/streamflow_D.yaml"
 OpenBench 在 YAML 的 `project.output_dir` 下追加 `project.name`，实际结果目录为
 `openbench_output/<project>`；不要把项目名再次写入 YAML 的输出根目录。
 
+`dlb_01` 创建实验时会自动生成 11 个 OpenBench 提交入口，位于
+`config/openbench_jobs/`。对历史实验，有效运行一次 `dlb_09`（仍需指定选择器）
+也会生成全部入口，即使该次选择没有待运行项目；显式 --dry-run 不生成入口。
+
+单组入口为 `submit_openbench_D.sh`、`submit_openbench_L.sh`、
+`submit_openbench_B.sh`、`submit_openbench_DL.sh`、`submit_openbench_DB.sh`、
+`submit_openbench_LB.sh`、`submit_openbench_DLB.sh`，以及
+`submit_openbench_ctl.sh`、`submit_openbench_spinup.sh`、
+`submit_openbench_comparisons.sh`。每组覆盖该组所有流域和指标。
+`submit_openbench_all.sh` 覆盖上述十组，提交一个总数组，统一使用并发上限。
+
+```bash
+# 先激活 OpenBench 环境，或传入 --openbench-exe /path/to/openbench
+bash "$EXP_DIR/config/openbench_jobs/submit_openbench_D.sh"
+bash "$EXP_DIR/config/openbench_jobs/submit_openbench_D.sh" --submit
+bash "$EXP_DIR/config/openbench_jobs/submit_openbench_all.sh" --dry-run
+bash "$EXP_DIR/config/openbench_jobs/submit_openbench_all.sh" --submit
+```
+
+入口默认只生成/复用 LSF 作业并预览，只有 `--submit` 调用 `bsub`；
+`--dry-run` 与 `--submit` 不能同时使用。入口固定实验选择，支持传入
+`--openbench-exe`、资源参数、`--out-dir`、`--log-dir`、`--retry-failed`、
+`--rerun-unverified`、`--overwrite`。`dlb_09` 也可直接使用新增的 `--ctl`、`--spinup`。
+入口始终放在实验的 `config/openbench_jobs/`；`--out-dir` 仅改变数组作业及快照位置。
+入口不保存生成时的资源选项，运行时使用 `dlb_09` 默认值或传入值；已有数组快照
+仍按原规则复用，修改资源需 `--overwrite`。OpenBench 资源独立于 CoLM 配置，
+继续使用 LSF，包括 CoLM 使用 Slurm 的实验。
+
+初始化只生成 `.sh`，无需安装或激活 OpenBench。首次运行入口时才检查可执行文件、
+生成 `.lsf` 和映射快照；有效运行 `dlb_09` 也会先生成入口，再按所选范围处理数组作业。
+内容相同的入口直接复用，内容不同需 `--overwrite`；不覆盖符号链接。
+生成入口不会运行 OpenBench，也不会提交 CoLM 作业。全部入口与单组入口是不同提交方式，
+同一批任务请选择其中一种，避免重复排队。
+
 批量生成 LSF 独占节点作业时，每个选项直接对应一套实验：`-D`、`-L`、
 `-B` 分别选择 E1_D、E2_L、E3_B，`-DL`、`-DB`、`-LB`、`-DLB`
 分别选择对应的组合实验。分开的选项表示同时提交多套实验，例如 `-L -B`
