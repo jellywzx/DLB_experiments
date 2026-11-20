@@ -49,7 +49,7 @@ def read_station_table(path):
     return frame
 
 
-def discover(root, simulation=None, reference=None, ids=None):
+def discover(root, simulation=None, reference=None, ids=None, reference_file=None):
     root = Path(root).resolve()
     manifest = json.loads((root/'run_manifest.json').read_text())
     config = manifest['canonical_config']
@@ -73,6 +73,9 @@ def discover(root, simulation=None, reference=None, ids=None):
     if str(project['tim_res']).lower() not in {'day', 'daily', '1d', 'd'}:
         raise ValueError('This tool currently supports daily reservoir evaluations only')
     start, end = [int(x) for x in project['years']]
+    if reference_file is not None:
+        from full_reference import discover_full
+        return discover_full(root, manifest, simulation, reference, enabled, reference_file, ids)
     stations_path = root/f'stn_{reference}_{simulation}_list.csv'
     stations = read_station_table(stations_path)
     flags = stations.get('Flag', pd.Series(True, index=stations.index)).astype(str).str.lower().isin(['true', '1'])

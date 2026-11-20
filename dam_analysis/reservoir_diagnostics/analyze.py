@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from io_openbench import discover, load_station, read_parameters, sha, ITEMS
 from diagnostics import metrics, seasonal, joint, balance_proxies, events
+from full_reference import DEFAULT_REFERENCE, prepare_full
 
 HERE=Path(__file__).resolve().parent
 
@@ -36,7 +37,7 @@ def reconcile(context, table):
             if not len(source):status='NO_OPENBENCH_ROW'
             elif not np.isfinite(expected) and not np.isfinite(actual):status='BOTH_UNDEFINED'
             elif np.isclose(expected,actual,rtol=1e-4,atol=1e-5,equal_nan=True):status='MATCH'
-            else:status='MISMATCH'
+            else:status='SOURCE_DIFFERENCE' if context.get('mode')=='full' else 'MISMATCH'
             rows.append(dict(ID=row['ID'],variable=v,metric=key,openbench_value=expected,recomputed_value=actual,
                              difference=actual-expected,status=status,rtol=1e-4,atol=1e-5))
     return pd.DataFrame(rows)
@@ -76,6 +77,14 @@ def write_report(out,context,station_summary,table,checks,event_table):
     lines+=['','图件：figures/*_timeseries、*_seasonal_scatter、*_process_proxy、all_*；可选事件图见figures/events。',
             '完整复核：tables/metrics.csv、metric_crosschecks.csv、seasonal.csv、joint_diagnostics.csv、data_quality.csv、selection_audit.csv；data为逐库配对序列及代理。',
             'provenance.json记录输入/程序SHA256、版本和参数；validation.json为独立产物检查结果。']
+    if context.get('mode')=='full':
+        lines[3]=f'从新参考文件与模型ID、区域和流域条件重建集合：{len(station_summary)}座，至少一个变量有配对的{int(station_summary.has_pairs.sum())}座。'
+        lines[4]=f'新旧来源对照：{int((checks.status=="MATCH").sum())}项一致，{int((checks.status=="SOURCE_DIFFERENCE").sum())}项差异；来源变化不作为计算失败。'
+        lines[5]=f'观测来自 {context["reference_file"]}；模拟按真实GRanD ID从原始月历史提取。旧29座清单不参与筛选。'
+        lines[7]='新参考无库容变量：只展示可用模拟库容，不混入旧参考；库容评价、三变量分类及库存守恒代理不可计算。'
+        lines[9]='本模式正式及探索性三变量类别均不可判定；只有入出流配对与候选事件分析。'
+        lines[10]='新参考科学变量已应用源QC；保留负入流，不用raw_mean替代。QC统计是手工QC前诊断，不能直接视作最终排除日数。'
+        lines.extend(['', '参考时间支持：'+str(context['reference_time_support']), '来源日历标签按原样配对；noon只是索引，未验证物理日界。', '负/近零观测分母使PBIAS及KGE均值比难以解释；详见metrics.csv的pbias_applicability及抵消比。'])
     (out/'report.txt').write_text('\n'.join(lines),encoding='utf-8')
     esc=html.escape
     doc=['<!doctype html><html lang="zh"><meta charset="utf-8"><title>Reservoir diagnostics</title>',
@@ -99,6 +108,8 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evaluation-dir',required=True,type=Path)
     parser.add_argument('--output-dir',type=Path,help='Must not exist; default: timestamped runs directory beside code')
+    parser.add_argument('--reference-mode',choices=['full','paired'],default='full',help='full: new reference cube + original model; paired: legacy evaluated pairs')
+    parser.add_argument('--reference-file',type=Path,default=DEFAULT_REFERENCE)
     parser.add_argument('--simulation');parser.add_argument('--reference')
     parser.add_argument('--ids',nargs='+');parser.add_argument('--parameters',type=Path)
     parser.add_argument('--events',action='store_true');parser.add_argument('--event-radius',type=int,default=14)
@@ -106,24 +117,25 @@ def main(argv=None):
     parser.add_argument('--dry-run',action='store_true',help='Read and validate all selected station data without writing output')
     args=parser.parse_args(argv)
     if args.event_radius<1 or args.max_event_plots<0:parser.error('Invalid event options')
-    context=discover(args.evaluation_dir,args.simulation,args.reference,args.ids)
+    context=discover(args.evaluation_dir,args.simulation,args.reference,args.ids,reference_file=args.reference_file if args.reference_mode=='full' else None)
     params,param_path=read_parameters(context,args.parameters)
     # Preflight all data before creating any output directory.
-    loaded={}
-    for row in context['stations'].itertuples(index=False):
-        loaded[row.ID]=load_station(context,pd.Series(row._asdict()))
+    loaded=prepare_full(context) if context.get('mode')=='full' else {}
+    if context.get('mode')!='full':
+        for row in context['stations'].itertuples(index=False):
+            loaded[row.ID]=load_station(context,pd.Series(row._asdict()))
     print(f'Preflight: {len(loaded)} reservoirs, {context["start"]}–{context["end"]}, {context["variables"]}',flush=True)
     if args.dry_run:
         counts={v:sum(any(a['variable']==v and a['n_pair']>0 for a in data[1]) for data in loaded.values()) for v in context['variables']}
-        print(json.dumps(dict(paired_reservoirs=counts),ensure_ascii=False));return 0
+        print(json.dumps(dict(paired_reservoirs=counts,selected_ids=context['stations'].ID.tolist()),ensure_ascii=False));return 0
     stamp=datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y%m%d_%H%M%S')
-    out=(args.output_dir or HERE/'runs'/f'{context["config"]["project"]["name"]}_{stamp}').resolve()
+    out=(args.output_dir or HERE/'runs'/f'{context["config"]["project"]["name"]}_{args.reference_mode}_{stamp}').resolve()
     if out==context['root'] or context['root'] in out.parents:
         raise ValueError('Output must be outside original evaluation directory')
     out.mkdir(parents=True,exist_ok=False)
     for directory in ['data','tables','figures','figures/events']:(out/directory).mkdir(exist_ok=True)
     from plotting import station_plots,process_plot,summary_plots,location_plot,event_plot
-    allmetrics=[];allaudits=[];allseasonal=[];alljoint=[];allquality=[];allevents=[];input_records=[];selection=[];summaries=[]
+    allmetrics=[];allaudits=[];allseasonal=[];alljoint=[];allquality=[];allevents=[];input_records=list(context.get('model_records',[]));selection=[];summaries=[]
     for row in context['stations'].itertuples(index=False):
         ident=row.ID;name=str(getattr(row,'DamName',ident));frame,audits,records=loaded[ident]
         print(f'Plotting {ident} {name}',flush=True)
@@ -143,7 +155,9 @@ def main(argv=None):
             for flag,mask in [('NEGATIVE_RETAINED',values<0),('ABOVE_PARAMETER_CAPACITY_RETAINED',(values>capacity) if col.endswith('storage') and np.isfinite(capacity) else pd.Series(False,index=frame.index))]:
                 for time,value in values[mask].items():allquality.append(dict(ID=ident,series=col,time=str(time),value=value,flag=flag))
         seasons=pd.DataFrame(seasonal(frame,ident));allseasonal.extend(seasons.to_dict('records'))
-        j=joint(frame,ident,capacity);alljoint.append(j)
+        j=joint(frame,ident,capacity)
+        if context.get('mode')=='full':j.update(classification_status='NOT_COMPUTABLE_NO_REFERENCE_STORAGE',provisional_class='UNDETERMINED')
+        alljoint.append(j)
         summary=dict(ID=ident,DamName=name,has_pairs=any(a['n_pair']>0 for a in audits),capacity_mcm=capacity,
                      n_joint=j['n_joint'],provisional_class=j['provisional_class'])
         for a in audits:summary[a['variable']+'_n']=a['n_pair']
@@ -170,6 +184,9 @@ def main(argv=None):
              'joint_diagnostics':pd.DataFrame(alljoint),'metric_crosschecks':checks,'reservoir_summary':summ,
              'selection_audit':pd.DataFrame(selection),'data_quality':pd.DataFrame(allquality,columns=['ID','series','time','value','flag']),
              'events':pd.DataFrame(allevents) if allevents else pd.DataFrame(columns=['ID','event','anchor','status'])}
+    if context.get('mode')=='full':
+        objects['selection_audit']=context['selection_audit']
+        objects['reference_qc_summary']=pd.DataFrame(context.get('qc_summary',[]))
     for name,df in objects.items():df.to_csv(out/'tables'/f'{name}.csv',index=False)
     summary_plots(table,context['stations'],audits,out/'figures');location_plot(context['stations'],table,context,out/'figures')
     for path in context['inventory']:
@@ -183,14 +200,15 @@ def main(argv=None):
              project=context['config']['project'],simulation=context['simulation'],reference=context['reference'],
              source_files=sources,input_files=list({r['path']:r for r in input_records}.values()),
              python=sys.version,platform=platform.platform(),numpy=np.__version__,pandas=pd.__version__,
-             storage_time_support='unverified',time_alignment='exact_preprocessed_timestamps_no_shift',
+             storage_time_support='absent' if context.get('mode')=='full' else 'unverified',time_alignment='exact_source_calendar_labels_no_shift',
+             reference_mode=args.reference_mode,reference_file=context.get('reference_file'),reference_metadata=context.get('reference_metadata'),reference_time_support=context.get('reference_time_support'),
              classification_thresholds=dict(positive_pbias_pct=10,storage_bias_fraction=.05,storage_nrmse=.1,outflow_KGE=.5),
              input_manifest_generated_at=context['manifest'].get('generated_at')))
     write_report(out,context,summ,table,checks,objects['events'])
     # Validation is independent and checks exported values as well as input fingerprints.
     from validate_outputs import validate
     result=validate(out);dump_json(out/'validation.json',result)
-    print(f'OUTPUT={out}',flush=True);print(json.dumps(result,ensure_ascii=False),flush=True)
+    print(f'OUTPUT={out}',flush=True);print(json.dumps({k:v for k,v in result.items() if k!='checks'},ensure_ascii=False),flush=True)
     return 0 if result['passed'] else 1
 
 

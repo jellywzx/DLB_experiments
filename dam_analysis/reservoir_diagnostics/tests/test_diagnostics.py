@@ -115,3 +115,60 @@ def test_global_mask_does_not_expand_location_map(tmp_path, monkeypatch):
     monkeypatch.setattr(plotting,'save',inspect)
     plotting.location_plot(stations,table,context,tmp_path)
     assert observed==[(-115.,-89.)]*3
+
+
+def full_run(tmp_path):
+    from full_reference import discover_full
+    root=tmp_path/'run';root.mkdir();history=tmp_path/'history';history.mkdir()
+    ids=['ResOpsUS_307','ResOpsUS_753','ResOpsUS_999']
+    times=pd.to_datetime(['2001-01-01T12:00','2001-01-02T12:00'])
+    ref=tmp_path/'reference.nc'
+    xr.Dataset({'Dam_Inflow':(('station','time'),[[np.nan,2.],[3.,4.],[5.,6.]],{'units':'m3 s-1'}),
+                'Dam_Outflow':(('station','time'),np.ones((3,2)),{'units':'m3 s-1'}),
+                'resops_inflow_raw_mean':(('station','time'),np.full((3,2),999.)),
+                'station_name':('station',['Fort Peck','Garrison','Outside'])},
+               coords={'station':[0,1,2],'station_id':('station',ids),'lon':('station',[-106.,-101.,0.]),'lat':('station',[48.,47.,0.]),'time':times}).to_netcdf(ref)
+    for month in range(1,13):
+        order=[307,753] if month%2 else [753,307]
+        vals=np.array([[float(i) for i in order]]*2)
+        xr.Dataset({'resv_GRAND_ID':('reservoir',order),
+                    'qresv_in':(('time','reservoir'),vals,{'units':'m3/s'}),
+                    'qresv_out':(('time','reservoir'),vals+1,{'units':'m3/s'}),
+                    'volresv':(('time','reservoir'),vals*1e6,{'units':'m3'})},
+                   coords={'time':pd.date_range(f'2001-{month:02d}-01T12:00',periods=2)}).to_netcdf(history/f'h_{2001}-{month:02d}.nc')
+    manifest={'canonical_config':{'project':{'years':[2001,2001],'lon_range':[-115,-89],'lat_range':[36,51]},
+                                 'simulation':{'E1':{'root_dir':str(history),'data_groupby':'Month','prefix':'h_'}}}}
+    context=discover_full(root,manifest,'E1','ResOpsUS',list(ITEMS),ref,None)
+    return context,ref
+
+
+def test_full_reference_restores_ids_without_old_csv_and_reorders_model(tmp_path):
+    from full_reference import prepare_full
+    c,ref=full_run(tmp_path)
+    assert set(c['stations'].ID)=={'307','753'} and c['variables']==['inflow','outflow']
+    loaded=prepare_full(c);frame=loaded['307'][0]
+    assert frame.loc['2001-02-01','sim_inflow'].iloc[0]==307
+    assert frame.obs_storage.isna().all() and frame.sim_storage.dropna().iloc[0]==307
+    assert frame.loc['2001-01-01','obs_inflow'].isna().all()  # never substitute raw_mean=999
+    assert c['selection_audit'].set_index('ID').loc['999','selected']==False
+
+
+def test_full_reference_id_validation():
+    from full_reference import reference_ids
+    assert reference_ids(['ResOpsUS_307'])==['307']
+    with pytest.raises(ValueError,match='Duplicate'):reference_ids(['ResOpsUS_307','ResOpsUS_307'])
+    with pytest.raises(ValueError,match='Invalid'):reference_ids(['station_307'])
+
+
+def test_new_reference_difference_is_not_legacy_failure():
+    from analyze import reconcile
+    table=pd.DataFrame([dict(ID='307',variable='inflow',KGE=1.,correlation=1.,rSD=1.,percent_bias=0.)])
+    context={'mode':'full','metrics':{'inflow':pd.DataFrame([dict(ID='307',KGE=-1.,correlation=.2,rSD=2.,percent_bias=50.)])}}
+    assert set(reconcile(context,table).status)=={'SOURCE_DIFFERENCE'}
+    context['mode']='paired';assert set(reconcile(context,table).status)=={'MISMATCH'}
+
+
+def test_signed_pbias_is_labelled_not_clipped():
+    m=metrics([-2.,1.],[5.,5.])
+    assert m['pbias_applicability']=='SIGNED_OR_ZERO_OBS_DENOMINATOR'
+    assert m['percent_bias']<0 and m['mean_bias']>0 and m['obs_negative_fraction']==.5

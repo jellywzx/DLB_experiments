@@ -32,14 +32,14 @@ def station_plots(frame, name, identifier, capacity, seasonal, out):
         if not m['n']:
             text='NO VALID OBSERVATION / SIMULATION PAIRS'
         if v=='storage':
-            text+='\nExploratory: stock time support unverified'
+            text+='\nExploratory: stock time support unverified' if frame.obs_storage.notna().any() else '\nNO REFERENCE STORAGE; model curve only'
             if np.isfinite(capacity):
                 ax.axhline(capacity,color='#999999',ls=':',lw=.8,label='Parameter capacity')
         ax.text(.01,.97,text,transform=ax.transAxes,va='top',fontsize=8,bbox={'facecolor':'white','alpha':.85,'edgecolor':'none'})
         ax.set_ylabel(v.title()+'\n'+('MCM' if v=='storage' else 'm³/s'));ax.grid(alpha=.2)
         ax.set_xlim(frame.index[0],frame.index[-1])
     axes[0].legend(loc='upper right',ncol=2);axes[0].set_title(title,loc='left')
-    axes[-1].xaxis.set_major_locator(mdates.AutoDateLocator(minticks=5,maxticks=9))
+    axes[-1].xaxis.set_major_locator(mdates.MonthLocator(interval=max(1, int(np.ceil(len(frame)/30.44/9)))))
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
     fig.tight_layout();save(fig,out/f'{identifier}_timeseries')
     fig,axes=plt.subplots(2,3,figsize=(13,7))

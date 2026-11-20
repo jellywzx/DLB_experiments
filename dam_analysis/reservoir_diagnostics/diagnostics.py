@@ -16,6 +16,10 @@ def metrics(obs, sim):
         out['percent_bias'] = 100*(s-o).sum()/o.sum()
     else:
         reasons.append('zero_observed_sum')
+    out.update(obs_signed_sum=float(o.sum()),obs_abs_sum=float(abs(o).sum()),obs_min=float(o.min()),sim_min=float(s.min()),
+               obs_negative_fraction=float((o<0).mean()),sim_negative_fraction=float((s<0).mean()),
+               obs_cancellation_ratio=float(abs(o.sum())/abs(o).sum()) if abs(o).sum()>0 else np.nan,
+               pbias_applicability='SIGNED_OR_ZERO_OBS_DENOMINATOR' if o.sum()<=0 else ('STRONG_CANCELLATION' if abs(o.sum())<.1*abs(o).sum() else 'POSITIVE_SUM_REPORT_ABSOLUTE_BIAS_TOO'))
     # Both standard deviations use population ddof=0, as in OpenBench xarray.std.
     if len(o) >= 2 and np.ptp(o) > 0:
         out['rSD'] = s.std()/o.std()

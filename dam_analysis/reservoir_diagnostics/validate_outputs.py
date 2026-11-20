@@ -18,7 +18,7 @@ def validate(directory):
     cross=pd.read_csv(root/'tables/metric_crosschecks.csv',dtype={'ID':str})
     check('unique_reservoir_ids',not summary.ID.duplicated().any())
     check('unique_metric_rows',not metrics.duplicated(['ID','variable']).any())
-    check('openbench_metric_agreement',not (cross.status=='MISMATCH').any(),f'{int((cross.status=="MISMATCH").sum())} mismatches')
+    check('legacy_metric_agreement_no_computation_mismatch',not (cross.status=='MISMATCH').any(),f'{int((cross.status=="MISMATCH").sum())} mismatches')
     provenance=json.loads((root/'provenance.json').read_text())
     project=provenance['project'];first,last=project['years'];expected_start=pd.Timestamp(int(first),1,1);expected_end=pd.Timestamp(int(last),12,31)
     for row in summary.itertuples():
@@ -45,7 +45,9 @@ def validate(directory):
         check('png_'+path.stem,ok)
         pdf=path.with_suffix('.pdf');check('pdf_'+path.stem,pdf.is_file() and pdf.open('rb').read(5)==b'%PDF-')
     for rec in provenance['input_files']:
-        check('unchanged_input_'+rec['path'],Path(rec['path']).is_file() and sha(rec['path'])==rec['sha256'])
+        path=Path(rec['path'])
+        ok=path.is_file() and (sha(path)==rec['sha256'] if 'sha256' in rec else path.stat().st_size==rec['size'] and path.stat().st_mtime_ns==rec['mtime_ns'])
+        check('unchanged_input_'+rec['path'],ok,rec.get('verification','SHA256'))
     for rec in provenance['source_files']:
         check('source_sha_'+Path(rec['path']).name,sha(rec['path'])==rec['sha256'])
     return dict(passed=all(x['passed'] for x in checks),checks_count=len(checks),reservoirs=len(summary),
