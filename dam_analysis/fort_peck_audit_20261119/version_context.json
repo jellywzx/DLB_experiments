@@ -1,0 +1,9 @@
+{
+  "checked_date": "2026-11-19",
+  "remote_master_commit": "bf9ad0076f05c999e7afd5da94821dc459ca80e4",
+  "remote_flow_blob_sha": "edd3f5bbbee24fb71ca58a3528ef15e6814f4c59",
+  "remote_flow_url": "https://github.com/zhongwangwei/CoLM202X/blob/master/main/HYDRO/MOD_Grid_RiverLakeFlow.F90",
+  "local_head": "d8f3a1fe4d57bae438d374e8d2be928b706071cb",
+  "local_flow_blob_sha": "edd3f5bbbee24fb71ca58a3528ef15e6814f4c59",
+  "statement": "Remote master and current local RiverLakeFlow text match by Git blob SHA; this is NOT proof that the production executable was built from this source. Launch-time executable SHA was not logged."
+}

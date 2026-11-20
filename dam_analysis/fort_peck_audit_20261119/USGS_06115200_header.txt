@@ -1,0 +1,31 @@
+# ---------------------------------- WARNING ----------------------------------------
+# Some of the data that you have obtained from this U.S. Geological Survey database may not 
+# have received Director's approval.  Any such data values are qualified as provisional and 
+# are subject to revision.  Provisional data are released on the condition that neither the 
+# USGS nor the United States Government may be held liable for any damages resulting from its use.
+#  Go to http://help.waterdata.usgs.gov/policies/provisional-data-statement for more information.
+#
+# File-format description:  http://help.waterdata.usgs.gov/faq/about-tab-delimited-output
+# Automated-retrieval info: http://help.waterdata.usgs.gov/faq/automated-retrievals
+#
+# Contact:   gs-w_support_nwisweb@usgs.gov
+# retrieved: 2026-10-01 00:14:42 -04:00	(natwebcaas01)
+#
+# Data for the following 1 site(s) are contained in this file
+#    USGS 06115200 Missouri River near Landusky MT
+# -----------------------------------------------------------------------------------
+#
+# TS_ID - An internal number representing a time series.
+# IV_TS_ID - An internal number representing the Instantaneous Value time series from which the daily statistic is calculated.
+#
+# Data provided for site 06115200
+#    TS_ID       Parameter    Statistic  IV_TS_ID       Description
+#    81104       00060        00003      82490          Discharge, cubic feet per second (Mean)
+#
+# Data-value qualification codes included in this output:
+#     A  Approved for publication -- Processing and review completed.
+#     e  Value has been estimated.
+#     P  Provisional data subject to revision.
+#     Ice  Value is affected by ice at the measurement site.
+#     Eqp  Value affected by equipment malfunction.
+#

@@ -1,0 +1,44 @@
+[
+  {
+    "path": "/share/home/dq061/wzx/CoLM/CoLM202X_1030/run/colm.x",
+    "sha256": "2c01289ad0b3712bb916e34fb3b19c95a0028bf8d47065c615f0f0d9eeb22b55",
+    "size": 13201216,
+    "mtime_ns": 1793617098432079558
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/CoLM202X_1030/.bld/MOD_Grid_RiverLakeFlow.o",
+    "sha256": "458f4cdd1847828538e7cb3175a792bdbbc9045d8d4e0145d223049d6d86f0de",
+    "size": 562376,
+    "mtime_ns": 1793617095691715000
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/riverlake/unitcatchment_regional.nc",
+    "sha256": "59da20c81425bc8ffb7bfcfaa4ec1f930e27eacbc0c2f6add2e190dab750a2fe",
+    "size": 184617961,
+    "mtime_ns": 1793625840353018947
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/CoLM202X_1030/main/HYDRO/MOD_Grid_RiverLakeFlow.F90",
+    "sha256": "d68987ee13edbc8bfcc2be8fbab684c67f8b78074376617d3c797ac8ccafa0c1",
+    "size": 82197,
+    "mtime_ns": 1793617097600968000
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/CoLM202X_1030/main/HYDRO/MOD_Grid_RiverLakeHist.F90",
+    "sha256": "2c63bdd97e8a2b42ab5e8786dba1b646baa0fd0723af7ebfa9d57bfda9e85867",
+    "size": 27309,
+    "mtime_ns": 1793617097550519000
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/CoLM202X_1030/main/HYDRO/MOD_Grid_RiverLakeNetwork.F90",
+    "sha256": "ca4d8202b7e287182184f790c6962a9974e2c03d7cf2425af2aa92ebcfd3cefe",
+    "size": 79487,
+    "mtime_ns": 1793617097623626000
+  },
+  {
+    "path": "/share/home/dq134/wzx/openbench/Streamflow/USGS_dv/discharge/06115200.rdb.gz",
+    "sha256": "8c44847bf0495dafe5e268ab1e203360ebc629ff664f40ffb9f9ca84c47ab765",
+    "size": 140846,
+    "mtime_ns": 1793241077438058000
+  }
+]

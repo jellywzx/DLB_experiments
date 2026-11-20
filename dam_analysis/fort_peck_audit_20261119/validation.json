@@ -1,0 +1,9 @@
+{
+  "rows": 730,
+  "unique_upstream_units": 1748,
+  "regional_full_upstream_set_equal": true,
+  "history_equals_direct_upstream_sum": true,
+  "history_matches_previous_raw_audit": true,
+  "png_decode_pass": true,
+  "scope": "read-only target-network analysis; no physical code edit or model rerun"
+}

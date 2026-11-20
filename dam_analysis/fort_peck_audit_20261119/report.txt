@@ -1,0 +1,90 @@
+Fort Peck（GRanD 307）入流高估只读核查
+核查日期：2026-11-19；实验 EXP000_spinup_USA_D_0p1；诊断时段 2001–2002。
+
+结论
+没有发现整个北美洲的径流被汇入 Fort Peck，也没有发现 Milk River/加拿大主要河网被错误接到 Fort Peck 上游。完整河网与区域河网的目标上游集合完全一致，汇水面积接近 USACE 值。高估在 Landusky 上游已经存在，并在 Landusky 至 Fort Peck 区段进一步增大。证据支持优先排查流域内产流/驱动及区间来水和路由储量过程，尚不能单独确认降水、融雪、径流参数或路由中的哪一个是最终根因。
+历史 qresv_in 与直接上游河段出流逐日相等，没有发现历史变量在输出阶段重复累计的信号。生产二进制只能定位到运行路径和现存文件指纹，缺少启动时哈希/构建清单，不能把现存 master 当作确证的运行版本。
+
+1. 实际文件与索引
+区域文件：/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/riverlake/unitcatchment_regional.nc
+完整文件：/share/home/dq013/zhwei/colm/data/CoLMruntime/unitcatchment/grid_routing_data_06min.nc
+上述完整文件由 E1_D 作业所用 nml 的 DEF_UnitCatchment_file 指定，DEF_UnitCatchment_regional=.true.。区域文件的 subset_note 仍写 mksrfdata；该属性不能独立证明实际生成程序或生成日期。
+区域河网 168988 单元，完整河网 1562463 单元。Fort Peck 的区域 dam_seq=164222，完整 dam_seq=1478822；区域 seq_src_index[164222]=1478822。seq 在两个文件中是从 1 开始的单元行号；dam_seq 是水坝对应的河网单元行号，不是水坝数组下标或 GRanD ID。目标水坝在区域 dam 数组的 Python 下标为 234（Fortran 第235项）。seq_next 是同一个文件内从1开始的下游行号，正数连接单元，非正值是边界标志，不作为数组索引。seq_src_index 把区域行号映回完整文件行号。
+河网代表点 (-106.45,48.05)；坝参数点 (-106.396,47.996)，应区分粗网格河段位置与实际坝址。
+区域 Fort Peck 的 seq_next=164248。Milk River near Nashua 的匹配单元162281也流入164248：两支在坝下相汇，不是 Milk River→Fort Peck。
+
+2. 上游遍历和面积
+严格根据 seq_next 构造逆邻接并遍历，未用 floodplain area 作集水面积。
+区域和完整河网均得到1748单元（含坝单元；严格坝上游1747单元）。集合映回源索引后相同：缺失0、额外0。
+面积对照（km²）：
+  输入网格球面面积按实际 inpmat 分配份额加权：147943.204
+  inpmat_area 正权重直接求和：148023.519
+  topo_area 上游合计（交叉检查）：147982.284
+  坝单元 topo_uparea：147982.287
+  dam_area_CaMa：147982.300
+  USACE 官方 57500 square miles，约148924 km²；与任务中的约149000 km²一致。
+与149000 km²相比，独立球面网格面积少0.709%，无法解释+128.07%入流偏差。
+方法：每个0.1°输入网格球面面积 A=R² Δlon [sin(lat_n)-sin(lat_s)]，R=6371.22 km；目标分配比例=目标1748单元收到该格的 inpmat_area / 区域所有单元收到该格的 inpmat_area。对 A×比例求和。权重是面积量，文件将 inpmat_area units 写作1，不能据此当无量纲比例直接使用；源码以它作面积推送权重。
+独特输入网格1924个；把它们整格面积全算入会得到162593.389 km²，边界格只能按分配比例计入。全河网对这些格的原始面积权重/球面面积比为1.000076–1.000928，无超过1.01的格，表明上述归一化没有掩盖成倍重复分配；约0.06%的差别属面积表示尺度差异。原始面积求和与球面积分结果分别保留，不混用。
+
+3. 国界和加拿大贡献
+使用缓存 Natural Earth 10m admin_0_boundary_lines_land，明确筛选 Canada–United States of America 的国界。目标上游单元中心最北48.95°N，加拿大单元中心0；输入格中心加拿大归属0。
+另对每个输入网格矩形与由国界划分出的加拿大侧多边形求交：8个边缘格存在细小交叠。该国界数据在本区约48.9925°N，与名义49°N有约0.0075°偏差。格内 inpmat 份额没有子网格几何，无法判定这部分到底分配给哪个单元。按 min(加拿大交叠面积,目标格分配面积) 累加得到目标加拿大面积保守上界46.608 km²（约0.0315%）；这是分辨率敏感的面积上界，不是加拿大实测/模拟水量。不能因此宣称加拿大每一滴水绝对为0，也不能将它解释为 Milk River 错接。
+Milk Nashua上游731单元，其中252个中心位于加拿大，说明分析确实识别到了跨境河网；这些河段不在 Fort Peck 上游集合。Milk模拟均流142.971 m³/s，在坝下汇入，与 Fort Peck 上游的径流输入分离。没有被动示踪输出，不能从日流量为这些加拿大单元估计精确水量贡献；拓扑上的大规模误汇入已被排除。
+
+4. 河网连接异常清单
+已核查：区域每条主 seq_next 映回完整文件后一致（0不一致）；区域源索引重复0；网格位置重复0；循环单元0；目标 seq_upst/seq_upn 与逆向 seq_next 不一致0；目标上游源文件坐标、面积、输入映射逐值一致；上游 mask_complete_upstream=1 的单元1748/1748，坝点为1。
+mask 的源码含义是本单元存在径流映射面积且所有直接上游已满足此条件后沿拓扑传播。它不等于“水量正确”，也不能独立证明未裁断；此处有完整网络集合对照作佐证。
+连接阈值筛出3个待复核长连边（球面直线距离>30km）：
+  27830→116451，32.254km；topo_distance=39.631km
+  28070→140521，31.769km；topo_distance=40.295km
+  76673→150731，32.344km；topo_distance=22.454km
+三条均与完整源文件一致、topo_basin不变、端点海拔下降。前两条可能是单元出口/粗网格表达；第三条存在代表点距离大于属性路程的疑点。没有高分辨率流向/子集水区边界，不能认定跨分水岭。已确证的错误连接0；待复核候选3。topo_basin一致只能排除该层级流域编号跳变，不能替代细分流域边界核验。
+E1_D 中 DEF_USE_BIFURCATION=.false.，因此本次主 seq_next 逆遍历对应启用的汇流路径；本次不把关闭的分汊边当作实际来水路径。
+
+5. 2001–2002 流量
+从24个月原始 hist_unitcat 文件按 lat_ucat/lon_ucat 与 seq_x/seq_y 读取少量河段，每个月按 resv_GRAND_ID 查找307列。730天无重复，history_window_seconds全部86400秒，按原始日标签配对，未移动日期、插值或补零。
+USGS 06115200 官方位置 (-108.687744,47.631431)，名称 Missouri River near Landusky MT，是库区上游河段，不是坝下出流站。对应最近河段163318，位置(-108.65,47.65)，距离3.501km，上游面积105854.575 km²；相邻163277面积105763.758 km²，也属于同一干流。官方现行总面积40649 square miles（约105281 km²），面积和路径均支持这一匹配，而非附近约100km²的小支流。
+本地 USGS 原始文件覆盖1934-03-01至2026-09-29；2001–2002共730日均流值，483日A、247日A:e（批准但估算）。缺测保留；此时段无数值缺测。cfs乘0.028316846592换算m³/s。估算日保留并明确标记，未另做剔除敏感性分析。
+Landusky结果：
+  2001：模拟193.615，观测125.273 m³/s；PBIAS +54.555%；日相关0.130
+  2002：模拟300.696，观测169.190 m³/s；PBIAS +77.726%；日相关0.398
+  两年：模拟247.156，观测147.232 m³/s；PBIAS +67.868%；日相关0.405
+模型在暖季呈明显的过强日峰；这支持来水与时间过程存在偏差，但不足以单凭图形把原因指定为融雪或降水。
+Fort Peck 两个直接上游单元：164196均流367.749，25873均流0.282 m³/s；合计368.030。坝单元 f_discharge 与 qresv_out均为354.031 m³/s，不能把坝点河道出流当成入流。
+Fort Peck参考入流161.367，模拟368.030 m³/s；独立复算PBIAS=+128.0703%，与先前分析完全一致。
+Landusky至坝区的模拟差额均值120.875 m³/s，而参考坝入流减USGS为14.135 m³/s。两年总偏差中，Landusky已有99.924 m³/s，区间增加约106.739 m³/s。该差额含传播、初末河道/库区储量变化及参考入流定义影响，不能直接称为区间产流实测值。重点检查Landusky以下约4.2万km²的侧向支流/库区汇流，以及Landusky上游已有的产流偏差。
+
+6. 径流映射和 qresv_in 定义
+现存源码：patch径流先按面积汇到输入网格，再除以 push_ucat2inpm%sum_area，随后用 inpmat_area 从输入格向河网单元求和，acc_rnof_uc += rnof_uc×1e-3×deltime，将mm/s转为m³。路由调用时把累计量加入单元水体并清零。目标上游行内输入格重复0、负面积权重0；映射与完整文件一致；静态未发现重复接收或未清零缺陷。现有历史未输出目标完整的陆面径流源项账本，不能建立“降水→蒸散→产流→入库”的完整数值守恒，也不能排除生产版运行时的其他误差。
+现存源码 reservoir_operation 接收的调度来水 = -sum_hflux_riv + qresv_ups_prev，后者为直接上游水库上一子步释放；历史来水在当前释放推送后重新设定为 hflux_fc-sum_hflux_riv（关闭分汊时）。历史 a_qresv_in按子步 q×dt 积分，最终除以 acctime_resv，写入m³/s日均流；不是累计m³。只统计河道传入通量，坝格自身的局地径流已进入存量，不应再强行加到 qresv_in。
+最强运行证据：730天 qresv_in − (f_discharge[164196]+f_discharge[25873]) 最大绝对差4.32e-12 m³/s，与既有独立原始提取逐日差0。因此没有历史记录重复相加/累计量误作日均量的信号。这不证明全部物理过程守恒，也不直接证明调度器每个子步所见来水完全相同。
+Fort Peck直接上游两个单元并非坝单元（由完整水坝索引核对，见 runtime_extra.json）；故级联水库直接相邻时的 qresv_ups_prev 差异不是目标的优先解释。
+
+7. 实际运行版本与 master
+日志 E1_D.239588.out 记录2026-11-10 10:15:55至11-11 15:55:24成功完成，240个MPI进程，执行路径为 /share/home/dq061/wzx/CoLM/CoLM202X_1030/run/colm.x。2001年1月历史 create_time=20261110-14:35:22 UTC+08，与作业时间相符。
+现存 colm.x mtime=2026-11-02 18:58:18 +08，大小13201216字节；SHA256=2c01289ad0b3712bb916e34fb3b19c95a0028bf8d47065c615f0f0d9eeb22b55；ELF build-id=eacf3fcfd66caa5a90e7e59b1ce2ac756e59a0ca。路由对象mtime为同日18:58:15。二进制含 qresv_ups_prev 和 history_window_seconds 符号/字符串，支持相应功能已被编入，不能据此证明每条源语句。
+实验 manifest记录本地HEAD d8f3a1fe4d57bae438d374e8d2be928b706071cb且工作树不干净。通过GitHub插件读取的远端master现为bf9ad0076f05c999e7afd5da94821dc459ca80e4。当前本地和远端 RiverLakeFlow 的Git blob相同（edd3f5bbbee24fb71ca58a3528ef15e6814f4c59），但仓库commit不同。
+没有找到作业启动时的二进制SHA、不可变构建源码快照或构建manifest。现存二进制是高度相关候选，不能完全核实它在运行后未被替换，也不能给生产源码指定精确commit。第6节源码解释明确限定为“现存源码”，历史逐日等式则是实际输出证据。此版本追溯缺口仍未解决，未用重新编译或完整模拟补造证据。
+
+8. 原因和证据等级
+强证据：上游来水确实偏高（Landusky +67.87%）；目标总汇水面积无成倍扩大；Milk在坝下汇流；历史入流等于真实直接上游日流之和。
+中等证据/优先假设：流域内气象驱动、陆面产流/雪过程及Landusky以下侧向来水存在偏差；也应检查河道/库区初末存量和路由时间过程。现有资料无法将这些过程进一步唯一归因。
+不支持：整个北美洲径流因模拟域大而自动累加、Milk River错误接到Fort Peck上游、历史 qresv_in 输出阶段重复累计。
+待核实：3条长连接的高分辨率合理性；严格生产源码与二进制一一对应；完整源汇守恒；边境亚网格细小面积的水量归属。
+实际陆面范围由nml和格点历史确认是125°W–65°W、25°N–50°N，不是整个北美洲。区域路由文件延伸到约69.45°N，是河系闭合保留范围；保留远处河段不意味着其水会流入Fort Peck。此目标上游均完整，现有证据不支持“模拟整个北美洲”导致高估。没有做不同模拟域的受控对照，因此不声称排除了所有数值域依赖效应。
+
+9. 产物及复核范围
+fort_peck_upstream.png/pdf：目标上游网格与河网、国界及Milk河网示意；颜色是映射份额，河线是网格代表点连接而非真实曲线。
+flow_diagnosis.png：Landusky模拟观测及历史入流/直接上游合计。
+upstream_units.csv、input_grid_area.csv、Landusky_candidates.csv、Milk_Nashua_candidates.csv、milk_downstream_path.csv、connection_flags.csv、border_overlap_cells.csv：可追溯明细。
+simulated_and_observed_daily.csv、flow_summary.csv、flow_crosschecks.json：逐日数据和统计。
+summary.json、supplement.json、mapping_partition_check.json、border_intersection.json、version_context.json、fingerprints.json、source_evidence.txt、validation.json：方法与证据。
+所有模型物理代码、实验输入、历史输出和既有评估均未修改；未运行CoLM/OpenBench/调度作业。仅在本独立目录生成分析脚本和产物。验证包括目标网络与面积核查、730日原始提取交叉检查、图片解码及目视检查。
+
+外部一手资料
+USACE Fort Peck官方汇水面积：https://www.nwd.usace.army.mil/fact-sheets/article/4550140/fort-peck-dam-and-fort-peck-lake/
+USGS Landusky位置/面积：https://waterdata.usgs.gov/monitoring-location/USGS-06115200/
+USGS Milk at Nashua：https://waterdata.usgs.gov/monitoring-location/06174500/
+USACE Fort Peck WCM（Milk与坝下释放至Wolf Point的关系）：https://water.usace.army.mil/cda/documents/wc/2506/FortPeckWCM_Final_Dec2018_Redacted.pdf
+GitHub当前源码：https://github.com/zhongwangwei/CoLM202X/blob/bf9ad0076f05c999e7afd5da94821dc459ca80e4/main/HYDRO/MOD_Grid_RiverLakeFlow.F90

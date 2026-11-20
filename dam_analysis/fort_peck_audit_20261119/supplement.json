@@ -1,0 +1,28 @@
+{
+  "regional_cycle_units": 0,
+  "regional_bbox": [
+    -139.95,
+    -64.45,
+    19.150000000000006,
+    69.45
+  ],
+  "inpmat_x_full_regional_equal": true,
+  "inpmat_y_full_regional_equal": true,
+  "inpmat_area_full_regional_equal": true,
+  "topo_area_full_regional_equal": true,
+  "topo_uparea_full_regional_equal": true,
+  "seq_x_full_regional_equal": true,
+  "seq_y_full_regional_equal": true,
+  "input_area_sum_km2": 148023.519126,
+  "topo_area_sum_km2": 147982.283764,
+  "connection_flags_count": 3,
+  "USGS_file_dates": [
+    "1934-03-01",
+    "2026-09-29"
+  ],
+  "USGS_2001_2002_rows": 730,
+  "USGS_2001_2002_qualifiers": {
+    "A": 483,
+    "A:e": 247
+  }
+}

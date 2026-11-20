@@ -1,0 +1,359 @@
+
+MOD_Grid_RiverLakeNetwork.F90 SOURCE ONLY
+220: 
+221:          CALL ncio_read_serial (parafile, 'seq_x', x_ucat)
+222:          CALL ncio_read_serial (parafile, 'seq_y', y_ucat)
+223: 
+224:          CALL ncio_read_serial (parafile, 'seq_next', ucat_next)
+225: 
+226:          IF (DEF_UnitCatchment_regional) CALL verify_regional_network (parafile, x_ucat, y_ucat)
+227: 
+228:          CALL ncio_inquire_length (parafile, 'lon', nlon_ucat)
+229:          CALL ncio_inquire_length (parafile, 'lat', nlat_ucat)
+230: 
+231:          CALL ncio_read_serial (parafile, 'inpmat_x', idmap_x)
+232:          CALL ncio_read_serial (parafile, 'inpmat_y', idmap_y)
+233:          CALL ncio_read_serial (parafile, 'inpmat_area', area_gd2uc)
+234: 
+235:       ENDIF
+236: 
+237:       IF (p_is_master) THEN
+238: 
+239:          totalnumucat = size(x_ucat)
+240: 
+241:          allocate (nups_nst (totalnumucat))
+242:          allocate (iups_nst (totalnumucat))
+243: 
+244:          nups_nst(:) = 0
+245:          DO i = 1, totalnumucat
+
+MOD_Grid_RiverLakeNetwork.F90 SOURCE ONLY
+508:       ! ----- Part 1: between runoff input elements and unit catchments -----
+509: 
+510: #ifdef USEMPI
+511:       CALL mpi_bcast (nlon_ucat, 1, MPI_INTEGER, p_address_master, p_comm_glb, p_err)
+512:       CALL mpi_bcast (nlat_ucat, 1, MPI_INTEGER, p_address_master, p_comm_glb, p_err)
+513: #endif
+514: 
+515:       CALL griducat%define_by_ndims (nlon_ucat, nlat_ucat)
+516: 
+517:       CALL build_worker_remapdata (landpatch, griducat, remap_patch2inpm)
+518: 
+519:       IF (DEF_UnitCatchment_regional) &
+520:          CALL check_regional_coverage (nlon_ucat, nlat_ucat, idmap_x, idmap_y, remap_patch2inpm)
+521: 
+522:       IF (p_is_worker) THEN
+523:          numinpm = remap_patch2inpm%num_grid
+524:          IF (numinpm > 0) THEN
+525:             allocate (inpm_gdid (numinpm))
+526:             inpm_gdid = remap_patch2inpm%ids_me
+527:          ENDIF
+528:       ENDIF
+529: 
+530: 
+531:       IF (p_is_master) THEN
+532: 
+533:          inpn = size(idmap_x,1)
+534: 
+535:          allocate(idmap_gd2uc (inpn,totalnumucat))
+536: 
+537:          idmap_gd2uc = (idmap_y-1)*nlon_ucat + idmap_x
+538: 
+539:          WHERE ((area_gd2uc <= 0) .or. (idmap_gd2uc <= 0))
+540:             idmap_gd2uc = 0
+541:             area_gd2uc  = 0.
+542:          END WHERE
+543: 
+
+MOD_Grid_RiverLakeNetwork.F90 SOURCE ONLY
+710: #endif
+711: 
+712:       IF (p_is_worker) THEN
+713:          IF (numucat > 0) THEN
+714:             allocate (ucat_gdid (numucat))
+715:             ucat_gdid = (y_ucat-1)*nlon_ucat + x_ucat
+716:          ENDIF
+717:       ENDIF
+718: 
+719:       CALL build_worker_pushdata (numinpm, inpm_gdid, numucat, idmap_gd2uc, area_gd2uc, push_inpm2ucat)
+720:       CALL build_worker_pushdata (numucat, ucat_ucid, numinpm, idmap_uc2gd, area_uc2gd, push_ucat2inpm)
+721:       CALL build_worker_pushdata (numucat, ucat_gdid, numinpm, inpm_gdid, push_ucat2grid)
+722:       CALL build_worker_pushdata (numinpm, inpm_gdid, numinpm, inpm_gdid, allreduce_inpm)
+723: 
+
+MOD_Grid_RiverLakeNetwork.F90 SOURCE ONLY
+1090: #else
+1091:       ucat_area_all = push_inpm2ucat%sum_area
+1092: #endif
+1093: 
+1094:       IF (p_is_master) THEN
+1095: 
+1096:          allocate (allups_mask_ucat (totalnumucat))
+1097:          allups_mask_ucat (:) = 0
+1098: 
+1099:          iups_nst(:) = 0
+1100:          DO i = 1, totalnumucat
+1101:             j = uc_up2down(i)
+1102:             IF (ucat_area_all(j) > 0.) THEN
+1103:                IF (iups_nst(j) == nups_nst(j)) THEN
+1104: 
+1105:                   allups_mask_ucat(j) = 1
+1106: 
+1107:                   IF (ucat_next(j) > 0) THEN
+1108:                      iups_nst(ucat_next(j)) = iups_nst(ucat_next(j)) + 1
+1109:                   ENDIF
+1110:                ENDIF
+1111:             ENDIF
+1112:          ENDDO
+1113: 
+1114:       ENDIF
+1115: 
+
+MOD_Grid_RiverLakeFlow.F90 SOURCE ONLY
+420: 
+421:       IF (p_is_worker) THEN
+422: 
+423:          allocate (rnof_gd (numinpm))
+424:          allocate (rnof_uc (numucat))
+425:          rnof_gd = 0.
+426: 
+427:          IF (numpatch > 0) THEN
+428:             filter_rnof = patchtype < 99 .and. patchmask
+429:             IF (DEF_forcing%has_missing_value) filter_rnof = filter_rnof .and. forcmask_pch
+430:             CALL worker_remap_data_pset2grid (remap_patch2inpm, rnof, rnof_gd, &
+431:                fillvalue = 0., filter = filter_rnof)
+432:          ENDIF
+433: 
+434:          IF (numinpm > 0) THEN
+435:             WHERE (push_ucat2inpm%sum_area > 0)
+436:                rnof_gd = rnof_gd / push_ucat2inpm%sum_area
+437:             END WHERE
+438:          ENDIF
+439: 
+440:          CALL worker_push_data (push_inpm2ucat, rnof_gd, rnof_uc, &
+441:             fillvalue = 0., mode = 'sum')
+442: 
+443: 
+444:          IF (numucat > 0) THEN
+445:             acc_rnof_uc = acc_rnof_uc + rnof_uc*1.e-3*deltime
+446:          ENDIF
+447: #ifdef MaterialTransport
+
+MOD_Grid_RiverLakeFlow.F90 SOURCE ONLY
+550:                   volwater = floodplain_curve(i)%volume (wdsrf_ucat(i))
+551:                ENDIF
+552:             ELSE
+553:                ! water in reservoirs is assumued to be stationary.
+554:                momen_riv(i) = 0
+555:                veloc_riv(i) = 0
+556:                volwater = volresv(ucat2resv(i))
+557:             ENDIF
+558: 
+559: #ifdef CoLMDEBUG
+560:             totalvol_bef = totalvol_bef + volwater
+561:             IF (DEF_USE_LEVEE .and. has_levee(i) .and. (.not. is_built_resv(i))) &
+562:                totalvol_bef = totalvol_bef + levsto(i)
+563: #endif
+564: 
+565:             volwater = volwater + acc_rnof_uc(i)
+566: 
+567:             IF (.not. is_built_resv(i)) THEN
+568:                IF (DEF_USE_LEVEE .and. has_levee(i)) THEN
+569:                   CALL levee_repartition_storage(i, volwater, wdsrf_ucat(i), fldfrc_levee, &
+570:                      vis_vol_bef_lv, levsto_bef_lv)
+571:                   levee_floodarea(i) = fldfrc_levee * topo_area(i)
+572: #ifdef MaterialTransport
+573:                   CALL mt_rlc_levee_repartition (i, vis_vol_bef_lv, levsto_bef_lv, &
+574:                      volwater, levsto(i), with_input = .true.)
+575: #endif
+576:                ELSE
+577:                   wdsrf_ucat(i) = floodplain_curve(i)%depth (volwater)
+578:                   ! wdsrf_ucat(i) changed: refresh the stored volume read below
+579:                   ! (see volwater_curve; identical to computing it at each read)
+580:                   IF (.not. (DEF_USE_BIFURCATION .or. DEF_USE_LEVEE)) &
+
+MOD_Grid_RiverLakeFlow.F90 SOURCE ONLY
+855:             ENDIF
+856: 
+857:             ! reservoir operation.
+858:             ! [GridRiverLakeFlow] Bug fix for cascades: the release of a reservoir is
+859:             ! pushed downstream only after all reservoirs are operated, and the outlet
+860:             ! flux of every reservoir was zeroed before the upstream sum, so a
+861:             ! reservoir directly below another never saw that release in the inflow
+862:             ! given to reservoir_operation (the water still arrived; only the
+863:             ! operation was wrong, e.g. a flood release of the upper dam stored by the
+864:             ! lower one).  The release that reached the reservoir in the previous
+865:             ! sub-step (qresv_ups_prev, kept in the restart) is added to that inflow.
+866:             ! A same-step value would need one push per cascade level; sub-steps are
+867:             ! at most 60 s, so the lag is small.  With bifurcation the value is the
+868:             ! release before the outgoing-flux limiter.  Results change only where a
+869:             ! built reservoir is directly downstream of another.
+870:             IF (DEF_Reservoir_Method > 0) THEN
+871: 
+872:                hflux_resv = 0.
+873:                mflux_resv = 0.
+874: 
+875:                DO i = 1, numucat
+876: 
+877:                   IF (.not. ucatfilter(i)) CYCLE
+878: 
+879:                   IF (ucat_next(i) == -10) THEN
+880:                      IF (is_built_resv(i)) THEN
+881:                         qresv_in (ucat2resv(i)) = - sum_hflux_riv(i) + qresv_ups_prev(ucat2resv(i))
+882:                         qresv_out(ucat2resv(i)) = 0.
+883:                      ENDIF
+884:                      CYCLE
+885:                   ENDIF
+886: 
+887:                   IF (is_built_resv(i)) THEN
+888: 
+889:                      irsv = ucat2resv(i)
+890:                      qresv_in(irsv) = - sum_hflux_riv(i) + qresv_ups_prev(irsv)
+891: 
+892:                      IF (volresv(irsv) > 1.e-4 * volresv_total(irsv) .or. &
+893:                          (DEF_Reservoir_Method == 2 .and. volresv(irsv) > 0._r8)) THEN
+894:                         CALL reservoir_operation (DEF_Reservoir_Method, &
+895:                            irsv, qresv_in(irsv), volresv(irsv), qresv_out(irsv))
+896:                      ELSE
+897:                         qresv_out (irsv) = 0.
+898:                      ENDIF
+899: 
+900:                      hflux_fc(i) = qresv_out(irsv)
+901:                      mflux_fc(i) = qresv_out(irsv) * sqrt(2*grav*wdsrf_ucat(i))
+902: 
+903:                      sum_hflux_riv(i) = sum_hflux_riv(i) + hflux_fc(i)
+904:                      sum_mflux_riv(i) = sum_mflux_riv(i) + mflux_fc(i)
+905: 
+906:                      hflux_resv(i) = hflux_fc(i)
+907:                      mflux_resv(i) = mflux_fc(i)
+908:                   ENDIF
+909: 
+910:                ENDDO
+911: 
+912:                CALL push_ups2ucat_sum (hflux_resv, hflux_sumups, mflux_resv, mflux_sumups)
+913: 
+914:                IF (numucat > 0) THEN
+915:                   WHERE (ucatfilter)
+916:                      sum_hflux_riv = sum_hflux_riv - hflux_sumups
+917:                      sum_mflux_riv = sum_mflux_riv - mflux_sumups
+918:                   END WHERE
+919:                ENDIF
+920: 
+921:                ! hflux_sumups now holds the release of the reservoirs directly upstream
+922:                DO i = 1, numucat
+923:                   IF (ucatfilter(i) .and. is_built_resv(i)) THEN
+924:                      qresv_ups_prev(ucat2resv(i)) = hflux_sumups(i)
+925:                      ! Dispatch above intentionally uses the lagged upstream
+926:                      ! release; history records the current water balance.
+927:                      qresv_in(ucat2resv(i)) = hflux_fc(i) - sum_hflux_riv(i)
+928:                   ENDIF
+929:                ENDDO
+930: 
+931:             ENDIF
+932: 
+933:             dt_local_min = huge(1._r8)
+934:             i_local_min  = 0
+935: 
+
+MOD_Grid_RiverLakeFlow.F90 SOURCE ONLY
+1060:                IF (DEF_Reservoir_Method > 0) THEN
+1061:                   ! Cache the actual limited reservoir release for the next dispatch.
+1062:                   hflux_resv = 0._r8
+1063:                   WHERE (ucatfilter .and. is_built_resv) hflux_resv = hflux_fc
+1064:                   CALL push_ups2ucat_sum (hflux_fc, hflux_sumups, mflux_fc, mflux_sumups, &
+1065:                      hflux_resv, mflux_resv)
+1066:                ELSE
+1067:                   CALL push_ups2ucat_sum (hflux_fc, hflux_sumups, mflux_fc, mflux_sumups)
+1068:                ENDIF
+1069:                WHERE (ucatfilter)
+1070:                   sum_hflux_riv = hflux_fc - hflux_sumups
+1071:                   sum_mflux_riv = mflux_fc - mflux_sumups
+1072:                END WHERE
+1073:                DO i = 1, numucat
+1074:                   IF (.not. ucatfilter(i)) CYCLE
+1075:                   IF (is_built_resv(i)) THEN
+1076:                      qresv_in(ucat2resv(i)) = hflux_sumups(i)
+1077:                      IF (DEF_Reservoir_Method > 0) qresv_ups_prev(ucat2resv(i)) = mflux_resv(i)
+1078:                   ENDIF
+1079:                ENDDO
+1080:                IF (DEF_GRIDBASED_ROUTING_MOMENTUM_DT_LIMIT) THEN
+
+MOD_Grid_RiverLakeFlow.F90 SOURCE ONLY
+1308:                      a_bifout(i) = a_bifout(i) + bif_hflux_sum(i) * dt_all(irivsys(i))
+1309: 
+1310:                   IF (is_built_resv(i)) THEN
+1311:                      irsv = ucat2resv(i)
+1312:                      acctime_resv(irsv) = acctime_resv(irsv) + dt_all(irivsys(i))
+1313:                      a_volresv   (irsv) = a_volresv  (irsv) + volresv  (irsv) * dt_all(irivsys(i))
+1314:                      a_qresv_in  (irsv) = a_qresv_in (irsv) + qresv_in (irsv) * dt_all(irivsys(i))
+1315:                      a_qresv_out (irsv) = a_qresv_out(irsv) + qresv_out(irsv) * dt_all(irivsys(i))
+1316:                   ENDIF
+1317: 
+1318:                ENDIF
+
+MOD_Grid_RiverLakeFlow.F90 SOURCE ONLY
+1390: #endif
+1391:       flood_evap_period = 0._r8
+1392:       flood_infil_period = 0._r8
+1393: 
+1394: #ifdef MaterialTransport
+1395:       ! material balance (CoLMDEBUG), limiter statistics, reset of the accumulations
+1396:       CALL mt_rlc_end_routing ()
+1397: #endif
+1398: 
+1399:       acctime_rnof = 0.
+1400: 
+1401:       IF (p_is_worker) THEN
+1402:          IF (numucat > 0) THEN
+1403:             acc_rnof_uc = 0.
+1404:          ENDIF
+1405:       ENDIF
+1406: 
+1407:       IF (DEF_GridRiverLake_FloodFeedback) CALL publish_flood_feedback(year)
+1408: 
+1409:       IF (allocated(is_built_resv)) deallocate(is_built_resv)
+1410:       IF (allocated(is_resv_upstream)) deallocate(is_resv_upstream)
+
+MOD_Grid_RiverLakeHist.F90 SOURCE ONLY
+600:                deallocate (volresv_local)
+601:             ENDIF
+602: 
+603:             IF (DEF_hist_vars%qresv_in) THEN
+604:                IF (p_is_worker .and. numresv > 0) THEN
+605:                   allocate (qresv_in_local (numresv))
+606:                   WHERE (acctime_resv > 0)
+607:                      qresv_in_local = a_qresv_in / acctime_resv
+608:                   ELSEWHERE
+609:                      qresv_in_local = spval
+610:                   END WHERE
+611:                ELSE
+612:                   allocate (qresv_in_local (0))
+613:                ENDIF
+614: 
+615:                CALL route_hist_write_resv (qresv_in_local, 'qresv_in', &
+616:                   longname = 'reservoir inflow', units = 'm^3/s')
+617:                deallocate (qresv_in_local)
+618:             ENDIF
+619: 
+620:             IF (DEF_hist_vars%qresv_out) THEN
+
+MOD_Grid_RiverLakeHist.F90 SOURCE ONLY
+665:       IF (allocated(a_levsto    )) a_levsto     = 0.
+666:       IF (allocated(a_levdph    )) a_levdph     = 0.
+667:       IF (allocated(a_bifout    )) a_bifout     = 0.
+668:       IF (allocated(a_bifflw_lev)) a_bifflw_lev = 0.
+669:       IF (allocated(a_bifflw_acctime)) a_bifflw_acctime = 0.
+670: 
+671:       IF (p_is_worker) THEN
+672: 
+673:          IF (numresv > 0) THEN
+674:             acctime_resv (:) = 0.
+675:             a_volresv    (:) = 0.
+676:             a_qresv_in   (:) = 0.
+677:             a_qresv_out  (:) = 0.
+678:          ENDIF
+679: 
+680: #ifdef MaterialTransport
+681:          CALL mt_rlc_flush_history ()
+682: #endif
+683: 

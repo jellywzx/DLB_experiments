@@ -1,0 +1,8 @@
+{
+  "method": "Natural Earth 10m Canada-USA Land boundary split polygon; intersect each 0.1deg input cell; WGS84 geodesic area. inpmat does not locate fractions inside a cell, so only upper bounds possible.",
+  "overlap_cells": 8,
+  "canada_overlap_whole_cell_km2": 48.14411118827057,
+  "target_canada_upper_bound_km2": 46.60803191531369,
+  "center_canada_count": 0,
+  "warning": "Boundary data offset from nominal 49N by about 0.0075 degrees; subgrid fringe is resolution-sensitive, not evidence of Milk River connection."
+}

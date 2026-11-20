@@ -1,0 +1,12 @@
+{
+  "raw_allocation_over_spherical_area_quantiles": [
+    1.0000760241788282,
+    1.0001300652647103,
+    1.0005783519968827,
+    1.0008800312609492,
+    1.0009275267168696
+  ],
+  "cells_allocation_over_1p01": 0,
+  "cells_allocation_over_1p05": 0,
+  "total_overallocation_km2": 87.87041413860246
+}

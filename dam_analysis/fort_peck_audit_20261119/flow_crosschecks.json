@@ -1,0 +1,10 @@
+{
+  "max_abs_inflow_minus_direct_upstream_m3s": 4.320099833421409e-12,
+  "max_abs_inflow_minus_prior_audit_m3s": 0.0,
+  "fortpeck_obs_mean": 161.36707945205484,
+  "fortpeck_pbias_pct": 128.07025176403587,
+  "sim_increment_from_Landusky_m3s": 120.87474186002292,
+  "obs_FortPeck_minus_Landusky_m3s": 14.135381155987286,
+  "Landusky_excess_m3s": 99.92386421448285,
+  "additional_excess_below_Landusky_m3s": 106.73936070403563
+}
