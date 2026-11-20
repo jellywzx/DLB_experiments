@@ -48,16 +48,17 @@ from dlb_parallel import add_workers_argument, timed_phase
 
 from dlb_site_config import parse_site_args,basin_specs
 
-MASK_ROOT=Path('/share/home/dq134/wzx/openbench/postprocess/basin_mask/outputs')
+LEGACY_MASK_ROOT=Path('/share/home/dq134/wzx/openbench/postprocess/basin_mask/outputs')
+MASK_ROOT=Path(__file__).resolve().parent/'basin_mask'
 BASINS={
     'USA':(
         ('missouri',[36.0,51.0],[-115.0,-89.0],
-         MASK_ROOT/'basin_masks_06min/missouri/missouri_basin.nc'),
+         MASK_ROOT/'outputs/basin_masks_06min/missouri/missouri_basin.nc'),
         ('lower_mississippi',[28.0,40.0],[-108.0,-88.0],
-         MASK_ROOT/'basin_masks_06min/lower_mississippi/lower_mississippi_basin.nc'),
+         MASK_ROOT/'huc08_mask_output/WBD_HUC2_08_Lower_Mississippi_mask.nc'),
     ),
-    'SA':(('amazon',[-22.0,11.0],[-82.0,-35.0],MASK_ROOT/'basin_masks_06min/amazon/amazon_basin.nc'),),
-    'Mekong':(('mekong',[9.0,34.0],[93.0,109.0],MASK_ROOT/'basin_masks_06min/mekong/mekong_basin.nc'),),
+    'SA':(('amazon',[-22.0,11.0],[-82.0,-35.0],MASK_ROOT/'outputs/basin_masks_06min/amazon/amazon_basin.nc'),),
+    'Mekong':(('mekong',[9.0,34.0],[93.0,109.0],MASK_ROOT/'outputs/basin_masks_06min/mekong/mekong_basin.nc'),),
     'Global':(('global',[-90.0,90.0],[-180.0,180.0],None),),
 }
 TREATMENTS=('E1_D','E2_L','E3_B','E4_DL','E5_DB','E6_LB','E7_ALL')
@@ -212,7 +213,7 @@ def main()->int:
     p.add_argument('--no-refresh',action='store_true',help=argparse.SUPPRESS)
     p.add_argument('--overwrite',action='store_true',
                    help='Replace selected YAMLs with --templates; otherwise replace all OpenBench configuration')
-    p.add_argument('--mask-root',type=Path,help='Basin masks; default from recorded server configuration')
+    p.add_argument('--mask-root',type=Path,help='Basin mask root containing outputs/ and huc08_mask_output/; default from recorded server configuration')
     add_workers_argument(p)
     args=parse_site_args(p,use_env=False)  # Existing experiment keeps its recorded mask root
     with timed_phase('Configuration planning'):
@@ -233,6 +234,9 @@ def main()->int:
         if not 2000<=start<=end<=2005:raise ValueError('evaluation years must be within 2000–2005')
         saved=manifest.get('site_config',{}).get('effective',{})
         mask_root=args.mask_root or Path(default_eval.get('mask_root',saved.get('mask_root',MASK_ROOT)))
+        # Migrate the former local output root when regenerating existing experiments.
+        if args.mask_root is None and mask_root in (LEGACY_MASK_ROOT,MASK_ROOT/'outputs'):
+            mask_root=MASK_ROOT
         basins=basin_specs(BASINS,region,mask_root,MASK_ROOT)
         mask_issues=[f'missing basin mask: {mask}' for _,_,_,mask in basins if mask and not mask.is_file()]
         if mask_issues and not colm.get('draft'):raise ValueError('\n'.join(mask_issues))

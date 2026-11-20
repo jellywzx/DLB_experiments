@@ -150,6 +150,30 @@ class OpenBenchTemplateTests(unittest.TestCase):
                     short=next((k for k,v in TREATMENTS.items() if v==label),label)
                     self.assertEqual(Path(project['config']).name,f'{project["type"]}_{short}.yaml')
 
+    def test_recorded_local_mask_root_migrates_to_project_masks(self):
+        for recorded in (generator.LEGACY_MASK_ROOT,generator.MASK_ROOT/'outputs'):
+            with self.subTest(recorded=recorded),tempfile.TemporaryDirectory() as td:
+                root=Path(td);fixture(root,'USA')
+                manifest_path=root/'manifest.yaml'
+                manifest=json.loads(manifest_path.read_text())
+                manifest['evaluation']['mask_root']=str(recorded)
+                manifest_path.write_text(json.dumps(manifest))
+                masks=root/'masks'
+                basins={'USA':tuple((name,lats,lons,masks/mask.relative_to(generator.MASK_ROOT))
+                                   for name,lats,lons,mask in generator.BASINS['USA'])}
+                with patch.object(generator,'MASK_ROOT',masks),patch.object(generator,'BASINS',basins):
+                    # The second legacy root is relative to the configured project mask root.
+                    if recorded!=generator.LEGACY_MASK_ROOT:
+                        manifest['evaluation']['mask_root']=str(masks/'outputs')
+                        manifest_path.write_text(json.dumps(manifest))
+                    generate(root)
+                updated=json.loads(manifest_path.read_text())
+                self.assertEqual(updated['evaluation']['mask_root'],str(masks))
+                for project in updated['evaluation']['projects']:
+                    config=yaml.safe_load((root/project['config']).read_text())
+                    expected=next(spec[3] for spec in basins['USA'] if spec[0]==project['basin'])
+                    self.assertEqual(config['project']['basin_mask'],str(expected))
+
     @unittest.skipUnless(importlib.util.find_spec('openbench'),'OpenBench not installed')
     def test_generated_yaml_loads_with_openbench(self):
         from openbench.config import load_config

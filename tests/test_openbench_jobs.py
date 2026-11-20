@@ -53,12 +53,12 @@ def run(root:Path,executable:Path,*args:str,ok:bool=True,env:dict|None=None):
 
 
 class OpenBenchJobTests(unittest.TestCase):
-    def test_usa_uses_standard_basin_masks(self):
+    def test_usa_uses_huc08_lower_mississippi_mask(self):
         from dlb_08_generate_openbench import BASINS,MASK_ROOT
         masks=[mask.relative_to(MASK_ROOT).as_posix() for _,_,_,mask in BASINS['USA']]
         self.assertEqual(masks,[
-            'basin_masks_06min/missouri/missouri_basin.nc',
-            'basin_masks_06min/lower_mississippi/lower_mississippi_basin.nc'])
+            'outputs/basin_masks_06min/missouri/missouri_basin.nc',
+            'huc08_mask_output/WBD_HUC2_08_Lower_Mississippi_mask.nc'])
 
     def test_generator_uses_output_root_without_project_name(self):
         with tempfile.TemporaryDirectory() as td:

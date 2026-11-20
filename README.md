@@ -716,6 +716,12 @@ success marker 必须全部存在。配置与科学约束检查仍由生成、�
 版本。Python 不再保存各变量的指标、评分列表，
 也不再把两个淹没变量放进同一个 YAML；科学评估规则和指标公式保持不变。
 
+默认掩膜根目录为本项目的 `basin_mask/`（`--mask-root` 也以这一层为根目录）：
+Lower Mississippi 使用 `huc08_mask_output/WBD_HUC2_08_Lower_Mississippi_mask.nc`，
+Missouri、Amazon、Mekong 使用 `outputs/basin_masks_06min/<流域>/<流域>_basin.nc`。
+已有实验记录的旧本机 `openbench/postprocess/basin_mask/outputs` 根目录，在未显式指定
+`--mask-root` 时会自动切换到上述新目录；已有 YAML 需按下方命令重新生成才会更新。
+
 | 模板 | 变量 | 参考数据 | 时间分辨率 |
 | --- | --- | --- | --- |
 | `streamflow.yaml` | Streamflow | OpenBench_Streamflow_Daily | Day |
