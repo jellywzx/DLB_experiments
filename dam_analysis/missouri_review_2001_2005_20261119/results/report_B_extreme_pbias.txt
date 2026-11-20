@@ -1,0 +1,87 @@
+B. 极端PBIAS的数学原因、数据特征及指标适用性
+
+重点核查Keyhole、Norton、Kirwin、Bonny，并补充现有流量指标绝对PBIAS≥1000%的其他站点：Angostura（893）、Enders（936）、Webster（963）。四个重点站点的负分母结论不扩展为其余三站均有负均值；应逐行读取统计。
+公式：PBIAS = 100×Σ(S−O)/ΣO = 100×(mean(S)/mean(O)−1)，所有项必须取相同有限配对日期。日均流量累计体积V=ΣQ×86400/10^6 MCM。缺测日不补零，累计体积只代表有效配对日，不冒充完整五年总量。库容只给均值/最小值等统计，不把库容逐日和当成累计流量。
+
+结论：四站入流ΣO均为负，正负观测相互抵消，净均值小而负；模拟均值为正。负PBIAS在这里不能解读为模型低估，它是负分母导致的符号反转和放大。四站出流均值为正但偏小，模拟显著更大，出流正PBIAS确实表示相对有符号总出流偏高；Bonny的观测出流变幅也极小，rSD易放大。
+
+观测统计（同变量模拟使用同样日期）：
+ ID      name variable    n       mean  minimum  negative_fraction  signed_volume_MCM  positive_volume_MCM  negative_volume_MCM  cancellation_ratio  pbias_pct
+872   Keyhole   inflow 1826 -0.0238165   -6.417           0.503834           -3.75745              92.0002             -95.7576           0.0200122   -73594.8
+872   Keyhole  outflow 1826   0.616253        0                  0             97.224               97.224                    0                   1    2814.85
+893 Angostura   inflow 1826    1.32922   -6.925           0.198248            209.706              238.141             -28.4351            0.786664    5446.97
+893 Angostura  outflow 1826    1.57783        0                  0            248.929              248.929                    0                   1    4588.91
+936    Enders   inflow 1799   0.139062  -86.729           0.266259            21.6149              39.6162             -18.0014            0.375144    7448.45
+936    Enders  outflow 1826   0.178806    0.028                  0            28.2096              28.2096                    0                   1    5987.61
+953    Norton   inflow 1790  -0.033252  -61.957           0.422346           -5.14261              28.7632             -33.9058             0.08206   -20361.5
+953    Norton  outflow 1826   0.138141    0.018                  0            21.7941              21.7941                    0                   1    5117.61
+956    Kirwin   inflow 1504  -0.295348 -305.997           0.410239           -38.3791              129.672             -168.051            0.128909   -6178.69
+956    Kirwin  outflow 1825    0.49463        0                  0            77.9932              77.9932                    0                   1     3663.6
+958     Bonny   inflow 1779  -0.177695  -173.73           0.501405           -27.3127              38.2975             -65.6102            0.262855   -10189.3
+958     Bonny  outflow 1824   0.179375    0.057                  0            28.2684              28.2684                    0                   1    10091.7
+963   Webster  outflow 1826   0.457186        0                  0            72.1285              72.1285                    0                   1    3340.49
+
+模拟统计：
+ ID      name variable    n    mean    minimum  negative_fraction  signed_volume_MCM  pbias_pct  mean_bias    rmse
+872   Keyhole   inflow 1826 17.5039 0.00876742                  0            2761.53   -73594.8    17.5277 34.3048
+872   Keyhole  outflow 1826 17.9629    2.19703                  0            2833.94    2814.85    17.3466 26.3288
+893 Angostura   inflow 1826 73.7311   0.171395                  0            11632.3    5446.97    72.4019 109.455
+893 Angostura  outflow 1826 73.9832    9.41867                  0            11672.1    4588.91    72.4054 105.905
+936    Enders   inflow 1799  10.497 0.00623033                  0            1631.59    7448.45    10.3579 22.4309
+936    Enders  outflow 1826  10.885   0.847299                  0            1717.29    5987.61    10.7062 19.4833
+953    Norton   inflow 1790 6.73734 0.00231138                  0            1041.97   -20361.5    6.77059 13.7832
+953    Norton  outflow 1826 7.20768    2.33209                  0            1137.13    5117.61    7.06954 9.76575
+956    Kirwin   inflow 1504 17.9533  0.0064615                  0            2332.95   -6178.69    18.2486 38.2234
+956    Kirwin  outflow 1825 18.6159    1.85442                  0            2935.35     3663.6    18.1212 28.2466
+958     Bonny   inflow 1779 17.9282 0.00519987                  0            2755.67   -10189.3    18.1059 38.3368
+958     Bonny  outflow 1824 18.2813    1.40191                  0            2881.02    10091.7    18.1019   34.07
+963   Webster  outflow 1826 15.7294    2.54107                  0            2481.58    3340.49    15.2722 20.6219
+
+cancellation_ratio=|ΣO|/Σ|O|。接近0表明正负抵消，而不是所有日流量都接近0。配对样本不足也独立报告；不混用全有效观测均值和不同日期的模拟均值。
+
+参考来源交叉核验：
+ ID variable                                                                                                                                                          processed_ref_path                                                                             original_ref_path                                                                                                       raw_csv_path  processed_original_mask_equal  processed_original_max_abs_diff  processed_raw_mask_equal  processed_raw_max_abs_diff  pbias_matches_saved
+872   inflow        /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_872_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_872.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_872.csv                           True                      1.86157e-06                      True                 1.86157e-06                 True
+872  outflow       /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_872_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_872.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_872.csv                           True                      2.09808e-07                      True                 2.09808e-07                 True
+872  storage /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_872_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_872.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_872.csv                           True                      7.56836e-06                      True                 7.56836e-06                 True
+893   inflow        /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_893_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_893.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_893.csv                           True                      1.34277e-06                      True                 1.34277e-06                 True
+893  outflow       /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_893_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_893.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_893.csv                           True                      3.89099e-07                      True                 3.89099e-07                 True
+893  storage /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_893_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_893.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_893.csv                           True                      7.56836e-06                      True                 7.56836e-06                 True
+936   inflow        /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_936_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_936.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_936.csv                           True                      3.72314e-06                      True                 3.72314e-06                 True
+936  outflow       /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_936_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_936.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_936.csv                           True                      2.13623e-07                      True                 2.13623e-07                 True
+936  storage /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_936_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_936.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_936.csv                           True                      9.46045e-07                      True                 9.46045e-07                 True
+953   inflow        /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_953_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_953.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_953.csv                           True                      1.52588e-06                      True                 1.52588e-06                 True
+953  outflow       /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_953_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_953.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_953.csv                           True                      1.16348e-07                      True                 1.16348e-07                 True
+953  storage /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_953_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_953.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_953.csv                           True                      1.89209e-06                      True                 1.89209e-06                 True
+956   inflow        /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_956_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_956.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_956.csv                           True                      1.36719e-05                      True                 1.36719e-05                 True
+956  outflow       /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_956_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_956.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_956.csv                           True                      2.36511e-07                      True                 2.36511e-07                 True
+956  storage /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_956_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_956.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_956.csv                           True                      3.78418e-06                      True                 3.78418e-06                 True
+958   inflow        /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_958_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_958.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_958.csv                           True                      4.27246e-06                      True                 4.27246e-06                 True
+958  outflow       /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_958_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_958.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_958.csv                           True                      2.95639e-08                      True                 2.95639e-08                 True
+958  storage /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_958_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_958.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_958.csv                           True                      1.89209e-06                      True                 1.89209e-06                 True
+963  outflow       /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_963_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_963.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_963.csv                           True                      2.32697e-07                      True                 2.32697e-07                 True
+963  storage /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_963_2001_2005.nc /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_963.nc /share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_963.csv                           True                      3.78418e-06                      True                 3.78418e-06                 True
+上述负值已存在于本次配对参考NetCDF、原始参考NetCDF和原始ResOpsUS逐库CSV中；按日标签比较保留缺测，差异量见表。未发现由本次绘图或PBIAS计算新产生负值的证据。即使多层一致，也只证明数据链一致，不证明负入流的物理含义或观测估算方法已核实。未核实它们是净入流、水量平衡反演、录入问题或实际回流；本报告不作此类归因。
+
+其他数学影响：KGE含beta=mean(S)/mean(O)，故同样受负/近零观测均值影响；不能把极低KGE全部视为时间过程极差。相关系数与rSD不含均值分母，但观测波动很小/接近常量时也不稳定。RMSE、MAE和绝对平均偏差可补充，但不解除数据定义问题。
+
+适用性与解读：
+1. 对四站入流，PBIAS数值可复现，但作为“偏高/偏低百分比”及跨库排名不适用；保留原值并标注SIGNED_OR_NEAR_ZERO_OBS_DENOMINATOR，不擅自删负值或截断到0。
+2. 对出流，正的小分母使巨大百分比成为真实的相对量，同时应报告m³/s平均偏差、RMSE与MCM累计差，避免仅据百分比判断绝对水量影响。
+3. 对库容，低观测平均库存也能产生大PBIAS；它不等同于容量误差。库容时间支持未核实，仍限探索性。全部12项变量/两侧统计见extreme_statistics.csv。
+4. denominator_sensitivity.csv另列100×Σ(S−O)/Σ|O|，仅展示抵消效应，明确不是标准PBIAS，不替换原评价。不得以筛掉负观测之后的高分宣称修复。
+
+实际路径：配对数据目录
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D
+已有指标
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/metrics
+原始参考NetCDF
+/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset
+原始CSV
+/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all
+
+复现命令：
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 /share/home/dq134/wzx/openbench/openbench_1015/.venv/bin/python /share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_review_2001_2005_20261119/check.py --out /tmp/missouri_review_NEW
+
+输入和评价结果未被修改；未重新运行CoLM/OpenBench；未提交Git。脚本以只读方式访问输入；fingerprints.json记录核查时的SHA256（大型月历史仅记录大小和mtime）。未保存读取前后双份哈希，不能将其称为前后逐字节不变性证明。详细明细见同目录CSV。
+补充完整性核验：与上次联合诊断保存的输入SHA256对照，182个既有评估目录文件全部一致，详见 existing_evaluation_integrity.json。

@@ -1,0 +1,14 @@
+ID,variable,n,signed_pbias,absolute_observed_sum,signed_bias_over_abs_observed_sum_pct,denominator_warning,positive_only_days,negative_days
+872,inflow,1826,-73594.76778152928,2173.123003553599,1472.794191446755,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,648,920
+872,outflow,1826,2814.853322490958,1125.2780048251152,2814.853322490958,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,339,0
+893,inflow,1826,5446.965744065283,3085.3669961581472,4284.931602516157,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,1356,362
+893,outflow,1826,4588.913367374529,2881.123998789466,4588.913367374529,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,856,0
+936,inflow,1799,7448.445124995157,666.8699997202493,2794.236468041896,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,1320,479
+936,outflow,1826,5987.611436961545,326.5000028051436,5987.611436961545,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,1826,0
+953,inflow,1790,-20361.484992062098,725.3349997950718,1670.863811621706,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,1034,756
+953,outflow,1826,5117.614683902342,252.24600145965815,5117.614683902342,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,1826,0
+956,inflow,1504,-6178.689755105011,3445.859013910871,796.4901065782556,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,494,617
+956,outflow,1825,3663.5979603038854,902.699000518769,3663.5979603038854,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,224,0
+958,inflow,1779,-10189.341133808106,1202.6349960372318,2678.3224476870987,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,886,892
+958,outflow,1824,10091.673564972243,327.180005017668,10091.673564972243,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,1824,0
+963,outflow,1826,3340.491208929471,834.8209996446967,3340.491208929471,NOT_STANDARD_PBIAS; sensitivity only; no negative-value clipping,212,0

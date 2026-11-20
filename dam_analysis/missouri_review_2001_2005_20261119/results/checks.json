@@ -1,0 +1,9 @@
+{
+  "mainstem_all_60_months": true,
+  "all_five_absent_whitelist": true,
+  "all_five_reference_has_data": true,
+  "selection_60_reproduced": true,
+  "selection_29_reproduced": true,
+  "extreme_pbias_reproduced": true,
+  "reference_masks_match": true
+}

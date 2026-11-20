@@ -1,0 +1,730 @@
+[
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_293_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_293_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_293_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_293_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_293_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_293_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_319_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_319_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_319_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_319_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_319_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_319_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_355_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_355_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_355_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_355_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_355_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_355_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_368_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_368_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_368_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_368_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_368_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_368_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_385_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_385_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_385_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_385_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_385_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_385_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_393_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_393_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_393_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_393_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_393_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_393_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_415_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_415_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_415_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_415_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_415_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_415_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_421_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_421_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_421_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_421_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_421_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_421_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_500_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_500_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_500_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_500_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_500_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_500_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_505_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_505_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_505_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_505_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_505_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_505_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_522_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_522_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_522_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_522_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_522_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_522_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_529_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_529_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_529_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_529_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_529_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_529_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_780_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_780_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_780_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_780_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_780_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_780_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_784_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_784_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_784_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_784_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_784_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_784_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_827_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_827_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_827_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_827_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_827_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_827_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_872_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_872_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_872_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_872_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_872_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_872_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_882_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_882_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_882_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_882_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_882_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_882_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_885_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_885_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_885_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_885_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_885_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_885_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_893_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_893_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_893_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_893_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_893_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_893_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_897_2001_2005.skip.txt",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_897_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_897_2001_2005.skip.txt",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_897_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_897_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_897_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_898_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_898_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_898_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_898_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_898_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_898_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_901_2001_2005.skip.txt",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_901_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_901_2001_2005.skip.txt",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_901_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_901_2001_2005.skip.txt",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_901_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_913_2001_2005.skip.txt",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_913_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_913_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_913_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_913_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_913_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_936_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_936_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_936_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_936_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_936_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_936_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_952_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_952_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_952_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_952_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_952_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_952_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_953_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_953_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_953_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_953_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_953_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_953_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_956_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_956_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_956_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_956_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_956_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_956_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_958_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_958_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_958_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_958_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_958_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_958_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_963_2001_2005.skip.txt",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_963_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_963_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_963_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_963_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_963_2001_2005.nc",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run_manifest.json",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/stn_ResOpsUS_E1_D_list.csv",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/metrics/Dam_Inflow_stn_ResOpsUS_E1_D_evaluations.csv",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/reservoir_matching/Dam_Inflow_ResOpsUS_E1_D.json",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/metrics/Dam_Outflow_stn_ResOpsUS_E1_D_evaluations.csv",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/reservoir_matching/Dam_Outflow_ResOpsUS_E1_D.json",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/metrics/Dam_Water_Storage_stn_ResOpsUS_E1_D_evaluations.csv",
+    "sha256_matches_previous_diagnostics": true
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/reservoir_matching/Dam_Water_Storage_ResOpsUS_E1_D.json",
+    "sha256_matches_previous_diagnostics": true
+  }
+]

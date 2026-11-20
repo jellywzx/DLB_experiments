@@ -1,0 +1,530 @@
+
+/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/data/custom/ResOpsUS_filter.py
+1: """Custom station filter for the ResOpsUS dataset."""
+2: 
+3: import logging
+4: from pathlib import Path
+5: 
+6: import pandas as pd
+7: 
+8: from openbench.util.station_ids import read_station_csv
+9: 
+10: 
+11: def _resolve_station_list(info) -> Path:
+12:     """Return the station list path that matches the routing grid resolution."""
+13:     explicit = getattr(info, "ref_fulllist", "")
+14:     if explicit:
+15:         path = Path(explicit).expanduser()
+16:         if not path.is_file():
+17:             raise FileNotFoundError(f"Explicit ResOpsUS station list not found: {path}")
+18:         return path
+19:     try:
+20:         sim_grid_res = float(info.sim_grid_res)
+21:     except Exception as exc:  # pragma: no cover - defensive
+22:         logging.error(f"Invalid sim_grid_res for ResOpsUS: {info.sim_grid_res} ({exc})")
+23:         raise
+24: 
+25:     file_map = {
+26:         0.25: "ResOpsUS_reservoir_matched_15min.csv",
+27:         0.1: "ResOpsUS_reservoir_matched_06min.csv",
+28:     }
+29:     if sim_grid_res not in file_map:
+30:         logging.error("ResOpsUS only supports sim_grid_res values of 0.25 or 0.1 degrees.")
+31:         raise ValueError(f"Unsupported sim_grid_res: {sim_grid_res}")
+32: 
+33:     filename = file_map[sim_grid_res]
+34:     candidates = [
+35:         Path(info.ref_dir) / "list" / filename,
+36:         Path(info.ref_dir).parent / "list" / filename,
+37:     ]
+38: 
+39:     for station_list in candidates:
+40:         if station_list.exists():  # pragma: no cover - IO guard
+41:             return station_list
+42: 
+43:     logging.error(f"ResOpsUS station list not found. Tried: {', '.join(str(p) for p in candidates)}")
+44:     raise FileNotFoundError(candidates[0])
+45: 
+
+/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/data/custom/ResOpsUS_filter.py
+76:     df = read_station_csv(station_list_path)
+77:     if "ID" not in df:
+78:         raise ValueError("ResOpsUS station list requires ID")
+79:     df["ID"] = df["ID"].map(grand_id)
+80:     if df.ID.duplicated().any():
+81:         raise ValueError(f"Duplicate ResOpsUS GRanD IDs: {df.loc[df.ID.duplicated(False), 'ID'].tolist()}")
+82:     rename = {"SYEAR": "ref_syear", "EYEAR": "ref_eyear", "LON": "ref_lon", "LAT": "ref_lat", "DIR": "ref_dir"}
+83:     df.rename(columns={key: val for key, val in rename.items() if val not in df}, inplace=True)
+84:     required = set(rename.values())
+85:     if not required <= set(df):
+86:         raise ValueError(f"ResOpsUS station list missing columns: {sorted(required-set(df))}")
+87:     for col in ("ref_syear", "ref_eyear", "ref_lon", "ref_lat"):
+88:         df[col] = pd.to_numeric(df[col], errors="raise")
+89:     if (df.ref_syear > df.ref_eyear).any():
+90:         raise ValueError("ResOpsUS station list has reversed years")
+91:     flags = df["Flag"] if "Flag" in df else pd.Series(True, index=df.index)
+92:     text = flags.astype(str).str.strip().str.lower()
+93:     if not text.isin(["true", "false", "1", "0"]).all():
+94:         raise ValueError("ResOpsUS Flag must be true/false or 1/0")
+95:     df["Flag"] = text.isin(["true", "1"])
+96:     GeneralInfoReader._resolve_relative_paths(df, "ref_dir", str(station_list_path), info.ref_dir)
+97:     df["use_syear"] = df.ref_syear.clip(lower=max(int(info.sim_syear), int(info.syear), int(info.ref_syear)))
+98:     df["use_eyear"] = df.ref_eyear.clip(upper=min(int(info.sim_eyear), int(info.eyear), int(info.ref_eyear)))
+99:     selected = (df.Flag & ((df.use_eyear-df.use_syear) >= info.min_year)
+100:                 & df.ref_lat.between(info.min_lat, info.max_lat) & df.ref_lon.between(info.min_lon, info.max_lon))
+101:     df = df[selected].copy()
+102:     if df.empty:
+103:         raise ValueError("No ResOpsUS stations selected in the requested region/years")
+104:     for path in df.ref_dir:
+105:         if not Path(path).is_file():
+106:             raise FileNotFoundError(f"ResOpsUS observation not found: {path}; check DIR relative to {station_list_path} or {info.ref_dir}")
+107:     if getattr(info, f"{info.sim_source}_reservoir_manifest", None):
+108:         df = match_reservoir_stations(info, df)
+109:     elif getattr(info, "sim_data_type", "grid") == "stn":
+110:         sim = getattr(info, "sim_stn_list", None)
+111:         if sim is None or sim.empty:
+112:             raise ValueError("ResOpsUS station simulation requires a simulation fulllist")
+113:         sim = sim.copy()
+114:         sim["ID"] = sim.ID.map(grand_id)
+115:         if sim.ID.duplicated().any():
+116:             raise ValueError("Duplicate simulation GRanD IDs")
+117:         # Keep reference filtering and both paths; never restore unselected rows.
+118:         df = merge_on_station_id(sim, df, suffixes=("_simdup", ""))
+119:         df["use_syear"] = df[["sim_syear", "use_syear"]].max(axis=1).astype(int)
+120:         df["use_eyear"] = df[["sim_eyear", "use_eyear"]].min(axis=1).astype(int)
+121:         df = df[(df.use_eyear-df.use_syear) >= info.min_year].copy()
+122:         if df.empty:
+123:             raise ValueError("No shared ResOpsUS station IDs/years")
+124:     info.stn_list = df
+125:     info.use_syear = int(df.use_syear.min())
+126:     info.use_eyear = int(df.use_eyear.max())
+
+/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/data/basin_mask.py
+145: 
+146: 
+147: def _station_coordinate_columns(stations: pd.DataFrame) -> tuple[str, str]:
+148:     for lon_name, lat_name in (
+149:         ("ref_lon", "ref_lat"),
+150:         ("sim_lon", "sim_lat"),
+151:         ("lon", "lat"),
+152:         ("LON", "LAT"),
+153:         ("longitude", "latitude"),
+154:         ("Longitude", "Latitude"),
+155:     ):
+156:         if lon_name in stations.columns and lat_name in stations.columns:
+157:             return lon_name, lat_name
+158:     raise ValueError("Basin mask filtering requires station longitude and latitude columns")
+159: 
+160: 
+161: def filter_stations_by_basin_mask(
+162:     stations: pd.DataFrame,
+163:     mask_path: str | os.PathLike[str],
+164: ) -> pd.DataFrame:
+165:     """Return station rows whose coordinates fall in a positive mask cell."""
+166:     if stations.empty:
+167:         return stations.copy()
+168: 
+169:     lon_name, lat_name = _station_coordinate_columns(stations)
+170:     longitudes = pd.to_numeric(stations[lon_name], errors="coerce").to_numpy(dtype=float)
+171:     latitudes = pd.to_numeric(stations[lat_name], errors="coerce").to_numpy(dtype=float)
+172:     valid_coordinates = np.isfinite(longitudes) & np.isfinite(latitudes)
+173:     inside = np.zeros(len(stations), dtype=bool)
+174: 
+175:     if valid_coordinates.any():
+176:         mask = load_basin_mask(mask_path)
+177:         selected = mask.sel(
+178:             lon=xr.DataArray(_normalized_longitudes(longitudes[valid_coordinates]), dims="station"),
+179:             lat=xr.DataArray(latitudes[valid_coordinates], dims="station"),
+180:             method="nearest",
+181:         )
+182:         inside[valid_coordinates] = np.asarray(selected.values, dtype=bool)
+183: 
+184:     return stations.loc[inside].copy()
+
+/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/data/reservoir.py
+235: def match_reservoir_stations(info, rows):
+236:     manifest_json = getattr(info, f"{info.sim_source}_reservoir_manifest")
+237:     manifest = json.loads(manifest_json)
+238:     candidates = rows[rows.ID.isin(manifest["common_ids"])].copy()
+239:     if candidates.empty:
+240:         raise ValueError("No common GRanD IDs between reservoir simulations and ResOpsUS observations")
+241:     windows = {row.ID: [int(row.use_syear), int(row.use_eyear)] for row in candidates.itertuples()}
+242:     valid = valid_reservoir_ids(manifest_json, json.dumps(windows, sort_keys=True))
+243:     selected = candidates[candidates.ID.isin(valid)].copy()
+244:     if selected.empty:
+245:         raise ValueError("No reservoir stations with finite simulation data across all selected simulations")
+246:     layout = manifest["sources"][info.sim_source]
+247:     selected["sim_dir"] = layout["files"][0]["path"]
+248:     selected["sim_syear"], selected["sim_eyear"] = info.sim_syear, info.sim_eyear
+249:     selected["sim_lon"], selected["sim_lat"] = selected.ref_lon, selected.ref_lat
+250:     audit = dict(manifest, selected_ids=selected.ID.tolist(),
+251:                  unmatched_observations=rows.loc[~rows.ID.isin(manifest["common_ids"]), "ID"].tolist(),
+252:                  all_missing_ids=sorted(set(candidates.ID) - set(valid), key=int),
+253:                  matching="exact GRanD ID; no spatial fallback")
+254:     target = Path(info.casedir) / "reservoir_matching" / f"{info.item}_{info.ref_source}_{info.sim_source}.json"
+255:     target.parent.mkdir(parents=True, exist_ok=True)
+256:     write_file_atomic(target, lambda path: Path(path).write_text(json.dumps(audit, indent=2)), suffix=".tmp.json")
+257:     logging.info("Reservoir matching: %d common stations for %s", len(selected), info.sim_source)
+
+/share/home/dq134/wzx/DLB_experiments/dlb_prepare_resopsus.py
+25: VARIABLES = {
+26:     'Dam_Inflow': {'varname': 'inflow', 'varunit': 'm3 s-1'},
+27:     'Dam_Outflow': {'varname': 'outflow', 'varunit': 'm3 s-1'},
+28:     'Dam_Water_Storage': {'varname': 'storage', 'varunit': 'million cubic meters'},
+29: }
+30: 
+31: 
+32: def prepare_list(source: Path, name: str, exclude_duplicates: bool = False) -> tuple[str, list[dict]]:
+33:     """Preserve matching coordinates and IDs; rebase legacy DIR fields."""
+34:     with (source/'list'/name).open(newline='', encoding='utf-8-sig') as stream:
+35:         reader = csv.DictReader(stream)
+36:         fields = reader.fieldnames
+37:         required = {'ID', 'SYEAR', 'EYEAR', 'LON', 'LAT', 'Flag', 'DIR'}
+38:         if not fields or not required.issubset(fields):
+39:             raise ValueError(f'{name}: missing CSV columns: {sorted(required-set(fields or []))}')
+40:         rows = list(reader)
+41:     if not rows:
+42:         raise ValueError(f'{name}: empty station list')
+43:     counts = Counter(row['ID'] for row in rows)
+44:     duplicates = sorted(station for station, count in counts.items() if count > 1)
+45:     if duplicates:
+46:         if not exclude_duplicates:
+47:             raise ValueError(f'{name}: ambiguous duplicate IDs: {duplicates}; review the source list or '
+48:                              'use --exclude-duplicate-ids to exclude ALL rows for these IDs')
+49:         print(f'WARNING {name}: excluding ALL rows for duplicate IDs: {duplicates}')
+50:         rows = [row for row in rows if row['ID'] not in duplicates]
+51:     seen = set()
+52:     for row in rows:
+53:         station = row['ID']
+54:         if not station.isascii() or not station.isdigit() or station in seen:
+55:             raise ValueError(f'{name}: invalid/duplicate station ID: {station!r}')
+56:         seen.add(station)
+57:         if int(row['SYEAR']) > int(row['EYEAR']):
+58:             raise ValueError(f'{name}: reversed years for station {station}')
+59:         if not (-180 <= float(row['LON']) <= 180 and -90 <= float(row['LAT']) <= 90):
+60:             raise ValueError(f'{name}: invalid coordinates for station {station}')
+61:         flag = row['Flag'].strip().lower()
+62:         if flag not in {'true', 'false', '1', '0'}:
+63:             raise ValueError(f'{name}: invalid Flag for station {station}')
+64:         # Numeric flags avoid pandas treating the string "False" as truthy.
+65:         row['Flag'] = '1' if flag in {'true', '1'} else '0'
+66:         path = source/'dataset'/f'ResOpsUS_{station}.nc'
+67:         if not path.is_file():
+68:             raise ValueError(f'{name}: missing observation: {path}')
+69:         row['DIR'] = str(path.resolve())
+70:     output = io.StringIO(newline='')
+71:     writer = csv.DictWriter(output, fieldnames=fields)
+72:     writer.writeheader()
+73:     writer.writerows(rows)
+74:     return output.getvalue(), rows
+75: 
+76: 
+77: def main() -> int:
+78:     parser = argparse.ArgumentParser(description=__doc__)
+79:     parser.add_argument('--source-dir', type=Path, default=DEFAULT_SOURCE)
+80:     parser.add_argument('--user-dir', type=Path,
+
+/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_joint_2001_2002/analyze.py
+20: OB = Path('/share/home/dq134/wzx/openbench/openbench_1015')
+21: sys.path.insert(0, str(OB/'src'))
+22: from openbench.data.reservoir import reservoir_index, reservoir_unit
+23: 
+24: TARGETS = [('Fort Peck',307,'Montana'),('Garrison',753,'North Dakota'),('Oahe',870,'South Dakota'),
+25:            ('Big Bend',884,'South Dakota'),('Fort Randall',None,'South Dakota'),('Gavins Point',895,'South Dakota')]
+26: VARS = {'inflow':'qresv_in','outflow':'qresv_out','storage':'volresv'}
+27: ITEMS = {'inflow':'Dam_Inflow','outflow':'Dam_Outflow','storage':'Dam_Water_Storage'}
+28: RAW = Path('/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS')
+29: CASE = Path('/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1')
+30: SOURCE = Path('/share/home/dq061/wzx/CoLM/CoLM202X_1030')
+31: 
+32: 
+33: def sha(path):
+34:     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_joint_2001_2002/analyze.py
+330:     p.add_argument('--attributes',type=Path,default=RAW/'source/attributes/reservoir_attributes.csv')
+331:     p.add_argument('--series',type=Path,default=RAW/'source/time_series_all')
+332:     p.add_argument('--source',type=Path,default=SOURCE)
+333:     args=p.parse_args()
+334:     if args.out.exists() and any(args.out.iterdir()): p.error('output directory must be new/empty; originals are never overwritten')
+335:     args.out.mkdir(parents=True,exist_ok=True)
+336:     for directory in ['figures','tables','report','data','provenance']: (args.out/directory).mkdir()
+337:     index=pd.date_range(args.start,args.end,freq='D')
+338:     if index.empty: raise ValueError('empty requested date range')
+339:     plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,'axes.spines.top':False,'axes.spines.right':False,
+340:                          'pdf.fonttype':42,'savefig.bbox':'tight'})
+341:     params=read_parameters(args.params); global_params=read_parameters(args.global_params)
+342:     attrs=pd.read_csv(args.attributes)
+343:     ids=[id for _,id,_ in TARGETS if id is not None]
+344:     sim,inventory=read_histories(args,ids,index)
+345:     audits=[];allmetrics=[];diagnostics=[];events=[];quality=[];frames={};seasonal_rows=[]
+346:     for order,(name,id,state) in enumerate(TARGETS,1):
+347:         audit=dict(order=order,reservoir=name,resopsus_id=id,grand_id=id,requested_start=args.start,requested_end=args.end,
+348:                    mapping='EXACT_ID_AND_NAME_AND_COORDINATES',status='NO_REFERENCE',storage_time_support='UNVERIFIED',
+349:                    capacity_mcm=np.nan)
+350:         frame=pd.DataFrame(np.nan,index=index,columns=[f'{side}_{v}' for side in ['obs','sim'] for v in VARS])
+351:         capacity=np.nan
+352:         if id is not None:
+353:             rows=params[params.grand_id==id];refs=attrs[attrs.DAM_ID==id]
+354:             if len(rows)!=1 or len(refs)!=1: raise ValueError(f'{name}: nonunique/missing parameter or attribute ID')
+355:             dam=rows.iloc[0];ref=refs.iloc[0]
+356:             if norm(dam.dam_name)!=norm(name) or norm(ref.DAM_NAME)!=norm(name) or ref.STATE!=state:
+357:                 raise ValueError(f'{name}: identity disagreement: {dam.dam_name}, {ref.DAM_NAME}, {ref.STATE}')
+358:             km=distance_km(dam.lon,dam.lat,ref.LONG,ref.LAT)
+359:             if km>5: raise ValueError(f'{name}: dam/observation location mismatch {km:.1f} km')
+360:             capacity=float(dam.capacity_mcm)
+361:             audit.update(dam_seq=int(dam.dam_seq),model_name=dam.dam_name,reference_name=ref.DAM_NAME,
+362:                          model_lon=dam.lon,model_lat=dam.lat,reference_lon=ref.LONG,reference_lat=ref.LAT,
+363:                          location_distance_km=km,capacity_mcm=capacity,reference_agency=ref.AGENCY_CODE,
+364:                          status='MATCHED_CALENDAR_LABELS_PHYSICAL_DAY_BOUNDARY_UNVERIFIED')
+365:             path=args.series/f'ResOpsUS_{id}.csv'
+366:             if path.is_file():
+367:                 obs=observations(path,index)
+368:                 audit.update(reference_file=str(path),reference_sha256=sha(path))
+369:                 for v in VARS:
+370:                     frame[f'obs_{v}']=obs[v];frame[f'sim_{v}']=sim[id][v]
+371:             else: audit.update(status='NO_REFERENCE',reference_file=str(path))
+372:         else:
+373:             rejected=global_params[global_params.grand_id==2356]
+374:             audit.update(mapping='NO_VERIFIED_US_FORT_RANDALL_ID',model_status='NO_VERIFIED_US_MODEL_PARAMETER',
+375:                          rejected_id=2356,rejected_reason='Canadian same-name reservoir; prohibited by task',
+376:                          rejected_lon=float(rejected.lon.iloc[0]) if len(rejected)==1 else np.nan,
+377:                          rejected_lat=float(rejected.lat.iloc[0]) if len(rejected)==1 else np.nan)
+378:         frames[name]=frame
+379:         for v in VARS:
+380:             m=metrics(frame[f'obs_{v}'],frame[f'sim_{v}'])
+381:             row=dict(order=order,reservoir=name,grand_id=id,variable=v,units='MCM' if v=='storage' else 'm3/s',
+382:                      alignment='calendar_labels_no_shift',kge_version='Gupta2009_sample_std_ddof1',**m)
+383:             if v=='storage':
+384:                 sm,seasonal=stock_metrics(frame.obs_storage,frame.sim_storage,index,capacity)
+385:                 row.update({f'provisional_{k}':val for k,val in sm.items()})
+
+/share/home/dq134/wzx/DLB_experiments/dam_analysis/reservoir_diagnostics/analyze.py
+94:     doc.append('<h2>解释与限制</h2><pre>'+esc('\n'.join(lines))+'</pre></html>')
+95:     (out/'report.html').write_text('\n'.join(doc),encoding='utf-8')
+96: 
+97: 
+98: def main(argv=None):
+99:     parser=argparse.ArgumentParser(description=__doc__)
+100:     parser.add_argument('--evaluation-dir',required=True,type=Path)
+101:     parser.add_argument('--output-dir',type=Path,help='Must not exist; default: timestamped runs directory beside code')
+102:     parser.add_argument('--simulation');parser.add_argument('--reference')
+103:     parser.add_argument('--ids',nargs='+');parser.add_argument('--parameters',type=Path)
+104:     parser.add_argument('--events',action='store_true');parser.add_argument('--event-radius',type=int,default=14)
+105:     parser.add_argument('--max-event-plots',type=int,default=2,help='Per reservoir, largest complete candidate windows; tables retain all candidates')
+106:     parser.add_argument('--dry-run',action='store_true',help='Read and validate all selected station data without writing output')
+107:     args=parser.parse_args(argv)
+108:     if args.event_radius<1 or args.max_event_plots<0:parser.error('Invalid event options')
+109:     context=discover(args.evaluation_dir,args.simulation,args.reference,args.ids)
+110:     params,param_path=read_parameters(context,args.parameters)
+111:     # Preflight all data before creating any output directory.
+112:     loaded={}
+113:     for row in context['stations'].itertuples(index=False):
+114:         loaded[row.ID]=load_station(context,pd.Series(row._asdict()))
+115:     print(f'Preflight: {len(loaded)} reservoirs, {context["start"]}–{context["end"]}, {context["variables"]}',flush=True)
+116:     if args.dry_run:
+117:         counts={v:sum(any(a['variable']==v and a['n_pair']>0 for a in data[1]) for data in loaded.values()) for v in context['variables']}
+118:         print(json.dumps(dict(paired_reservoirs=counts),ensure_ascii=False));return 0
+119:     stamp=datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y%m%d_%H%M%S')
+120:     out=(args.output_dir or HERE/'runs'/f'{context["config"]["project"]["name"]}_{stamp}').resolve()
+121:     if out==context['root'] or context['root'] in out.parents:
+122:         raise ValueError('Output must be outside original evaluation directory')
+123:     out.mkdir(parents=True,exist_ok=False)
+
+/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/core/metrics.py
+98:     def percent_bias(self, s, o):
+99:         """
+100:         Calculate Percent Bias using the standard signed observed-sum denominator.
+101: 
+102:         This metric is intended for variables whose observed aggregate is
+103:         meaningfully non-zero. Sign-changing anomaly or flux series can make
+104:         percent bias unstable or difficult to interpret.
+105: 
+106:         Args:
+107:             s (xr.DataArray): Simulated data
+108:             o (xr.DataArray): Observed data
+109: 
+110:         Returns:
+111:             xr.DataArray: Percent bias
+112:         """
+113:         s, o = self._validate_inputs(s, o)
+114:         o_sum = o.sum(dim="time")
+115:         return xr.where(o_sum != 0, 100.0 * (s - o).sum(dim="time") / o_sum, np.nan)
+116: 
+
+/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/core/metrics.py
+350:     def KGE(self, s, o):
+351:         """
+352:         Kling-Gupta Efficiency
+353:         input:
+354:             s: simulated
+355:             o: observed
+356:         output:
+357:             kge: Kling-Gupta Efficiency
+358:             cc: correlation
+359:             alpha: ratio of the standard deviation
+360:             beta: ratio of the mean
+361:         """
+362:         s, o = self._validate_inputs(s, o)
+363:         cc = self.correlation(s, o)
+364:         # Guard against constant observation (std=0) and zero-mean observation
+365:         # (e.g. precipitation in a dry month). Without these guards alpha/beta
+366:         # become inf and kge becomes -inf, silently polluting downstream output.
+367:         o_std = o.std(dim="time")
+368:         o_mean = o.mean(dim="time")
+369:         alpha = xr.where(varies_along(o) & (o_std != 0), s.std(dim="time") / o_std, np.nan)
+370:         beta = xr.where(o_mean != 0, s.mean(dim="time") / o_mean, np.nan)
+371:         kge = 1 - ((cc - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2) ** 0.5
+372:         return kge  # , cc, alpha, beta
+373: 
+
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/config/openbench_manual/missouri/dam_all.yaml
+1: project:
+2:   tim_res: Day
+3:   name: EXP000_spinup_USA_missouri_dam_all_E1_D
+4:   output_dir: /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output
+5:   years:
+6:   - 2001
+7:   - 2005
+8:   min_year_threshold: 1
+9:   grid_res: 0.1
+10:   lat_range:
+11:   - 36.0
+12:   - 51.0
+13:   lon_range:
+14:   - -115.0
+15:   - -89.0
+16:   num_cores: 2
+17:   basin_mask: /share/home/dq134/wzx/openbench/postprocess/basin_mask/outputs/basin_masks_06min/missouri/missouri_basin.nc
+18: evaluation:
+19:   variables:
+20:   - Dam_Inflow
+21:   - Dam_Outflow
+22:   - Dam_Water_Storage  
+23: reference:
+24:   Dam_Inflow: ResOpsUS
+25:   Dam_Outflow: ResOpsUS
+26:   Dam_Water_Storage: ResOpsUS
+27:   overrides:
+28:     ResOpsUS:
+29:       root_dir: /share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS
+30:       fulllist: /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/resopsus_reference/list/ResOpsUS_reservoir_matched_06min.csv
+31: metrics:
+32: - KGE
+33: - correlation
+34: - rSD
+35: - percent_bias
+36: scores:
+37: - Overall_Score
+38: - nBiasScore
+39: - nRMSEScore
+40: - nPhaseScore
+41: - nIavScore
+42: - nSpatialScore
+43: - nSeasonalityScore
+44: comparison:
+45:   items:
+46:   - Taylor_Diagram
+47:   - HeatMap
+48:   - Diff_Plot
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:72: 2026-11-16 16:51:05,722 - root - INFO - Reservoir matching: 60 common stations for E1_D
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:73: 2026-11-16 16:51:05,732 - root - INFO - Basin mask filtering: 60 -> 29 stations
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:89: 2026-11-16 16:57:23,700 - root - INFO - Reservoir matching: 60 common stations for E1_D
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:90: 2026-11-16 16:57:23,703 - root - INFO - Basin mask filtering: 60 -> 29 stations
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:183: 2026-11-16 17:00:10,861 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:196: 2026-11-16 17:00:11,112 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:209: 2026-11-16 17:00:11,345 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:222: 2026-11-16 17:00:11,581 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:235: 2026-11-16 17:00:11,815 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:248: 2026-11-16 17:00:12,058 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:261: 2026-11-16 17:00:12,303 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:274: 2026-11-16 17:00:12,548 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:287: 2026-11-16 17:00:12,784 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:300: 2026-11-16 17:00:13,031 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:313: 2026-11-16 17:00:13,262 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:326: 2026-11-16 17:00:13,509 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:339: 2026-11-16 17:00:13,750 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:352: 2026-11-16 17:00:13,994 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:365: 2026-11-16 17:00:14,240 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:378: 2026-11-16 17:00:14,477 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:391: 2026-11-16 17:00:14,711 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:404: 2026-11-16 17:00:14,954 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:417: 2026-11-16 17:00:15,194 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:430: 2026-11-16 17:00:15,431 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:443: 2026-11-16 17:00:15,671 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:456: 2026-11-16 17:00:15,985 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:469: 2026-11-16 17:00:16,220 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:482: 2026-11-16 17:00:16,453 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:495: 2026-11-16 17:00:16,696 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:508: 2026-11-16 17:00:16,938 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:521: 2026-11-16 17:00:17,181 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:534: 2026-11-16 17:00:17,418 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:547: 2026-11-16 17:00:17,664 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:626: 2026-11-16 17:02:33,919 - root - INFO - Reservoir matching: 60 common stations for E1_D
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:627: 2026-11-16 17:02:33,927 - root - INFO - Basin mask filtering: 60 -> 29 stations
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:717: 2026-11-16 17:05:19,871 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:730: 2026-11-16 17:05:20,111 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:743: 2026-11-16 17:05:20,353 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:756: 2026-11-16 17:05:20,596 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:769: 2026-11-16 17:05:20,844 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:782: 2026-11-16 17:05:21,091 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:795: 2026-11-16 17:05:21,342 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:808: 2026-11-16 17:05:21,586 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:821: 2026-11-16 17:05:21,836 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:834: 2026-11-16 17:05:22,086 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:847: 2026-11-16 17:05:22,324 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:860: 2026-11-16 17:05:22,575 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:873: 2026-11-16 17:05:22,818 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:886: 2026-11-16 17:05:23,068 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:899: 2026-11-16 17:05:23,317 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:912: 2026-11-16 17:05:23,561 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:925: 2026-11-16 17:05:23,812 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:938: 2026-11-16 17:05:24,050 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:951: 2026-11-16 17:05:24,300 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:964: 2026-11-16 17:05:24,542 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:977: 2026-11-16 17:05:24,790 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:990: 2026-11-16 17:05:25,109 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1003: 2026-11-16 17:05:25,353 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1016: 2026-11-16 17:05:25,584 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1029: 2026-11-16 17:05:25,823 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1042: 2026-11-16 17:05:26,075 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1055: 2026-11-16 17:05:26,318 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1068: 2026-11-16 17:05:26,567 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1081: 2026-11-16 17:05:26,820 - root - INFO - Applied unit conversion for sim station data: m3 s-1 -> m3 s-1
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1160: 2026-11-16 17:07:45,152 - root - INFO - Reservoir matching: 60 common stations for E1_D
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1161: 2026-11-16 17:07:45,156 - root - INFO - Basin mask filtering: 60 -> 29 stations
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1250: 2026-11-16 17:10:32,265 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1263: 2026-11-16 17:10:32,510 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1276: 2026-11-16 17:10:32,753 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1289: 2026-11-16 17:10:32,999 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1302: 2026-11-16 17:10:33,242 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1315: 2026-11-16 17:10:33,486 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1328: 2026-11-16 17:10:33,731 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1341: 2026-11-16 17:10:33,976 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1354: 2026-11-16 17:10:34,215 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1367: 2026-11-16 17:10:34,458 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1380: 2026-11-16 17:10:34,706 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1393: 2026-11-16 17:10:34,963 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1406: 2026-11-16 17:10:35,230 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1419: 2026-11-16 17:10:35,475 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1432: 2026-11-16 17:10:35,722 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1445: 2026-11-16 17:10:35,973 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1458: 2026-11-16 17:10:36,222 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1471: 2026-11-16 17:10:36,471 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1484: 2026-11-16 17:10:36,719 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1497: 2026-11-16 17:10:36,963 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1510: 2026-11-16 17:10:37,214 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1523: 2026-11-16 17:10:37,530 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1536: 2026-11-16 17:10:37,774 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1549: 2026-11-16 17:10:38,026 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1562: 2026-11-16 17:10:38,270 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1575: 2026-11-16 17:10:38,515 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1588: 2026-11-16 17:10:38,760 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1601: 2026-11-16 17:10:39,019 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1614: 2026-11-16 17:10:39,270 - root - INFO - Applied unit conversion for sim station data: m3 -> mcm
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1633: 2026-11-16 17:10:39,427 - root - INFO - Reservoir matching: 60 common stations for E1_D
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1634: 2026-11-16 17:10:39,433 - root - INFO - Basin mask filtering: 60 -> 29 stations
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1730: 2026-11-16 17:11:00,990 - root - INFO - Reservoir matching: 60 common stations for E1_D
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1731: 2026-11-16 17:11:00,992 - root - INFO - Basin mask filtering: 60 -> 29 stations
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1830: 2026-11-16 17:11:21,720 - root - INFO - Reservoir matching: 60 common stations for E1_D
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log:1831: 2026-11-16 17:11:21,722 - root - INFO - Basin mask filtering: 60 -> 29 stations

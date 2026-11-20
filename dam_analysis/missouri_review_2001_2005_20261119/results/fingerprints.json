@@ -1,0 +1,878 @@
+[
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_872.csv",
+    "size": 953729,
+    "mtime_ns": 1617725684000000000,
+    "sha256": "713ad5d1368fd82cd235d04da82e31cf7524b66f3a121de2eabc507fb7a50bc9"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_893.csv",
+    "size": 1002977,
+    "mtime_ns": 1617725684000000000,
+    "sha256": "617db1e8bc91678029db5f24d07349cc7935dce61be1e8d0784927b9cc7b14e4"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_936.csv",
+    "size": 985662,
+    "mtime_ns": 1617725684000000000,
+    "sha256": "7aa5dbb5fb93a8721b8ef78ef4eae353cac3ace54fbcc436c17417ac060f507d"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_953.csv",
+    "size": 823215,
+    "mtime_ns": 1617725684000000000,
+    "sha256": "f886edb968ed4979441bb8644c7686e089a35864164b495bab503fb1893558e7"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_956.csv",
+    "size": 559782,
+    "mtime_ns": 1617725685000000000,
+    "sha256": "b0bdd1702ac0e530bb4b02d271804115d5bdefe7a38f40fbb77aa7ee97f92e53"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_958.csv",
+    "size": 1026484,
+    "mtime_ns": 1617725685000000000,
+    "sha256": "b01af802858211d14a2c94fd17fdcf929bd4626a643b9f94696b261067ea59d1"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Data_ref/stn_ref/Dam_River_Lake/ResOpsUS/source/time_series_all/ResOpsUS_963.csv",
+    "size": 543335,
+    "mtime_ns": 1617725685000000000,
+    "sha256": "dce6da289dc6723bae460c53107bb4f4051c492be89c3f44296fd0c2a05e71fa"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_307.nc",
+    "size": 1210720,
+    "mtime_ns": 1730532032000000000,
+    "sha256": "06f499719197052e4591eb59495a66d33637f89b9af56d113d1f465db9efb869"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_753.nc",
+    "size": 978240,
+    "mtime_ns": 1730532059000000000,
+    "sha256": "4bdc622194901964a40daf881b5395f722a360e6e8cfed9ad93f2e93da038cf6"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_870.nc",
+    "size": 910000,
+    "mtime_ns": 1730532060000000000,
+    "sha256": "88726e59ec108637add6fd65f3ead623d7c9f14b4d81579f924a03067405d5bd"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_872.nc",
+    "size": 1013480,
+    "mtime_ns": 1730532035000000000,
+    "sha256": "33adc075fef119ca9feb6f9d5e83a9f404812a15cf8911fbb6c8fffa70e45264"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_884.nc",
+    "size": 837040,
+    "mtime_ns": 1730532054000000000,
+    "sha256": "3be26ec816bbd0ec976db9ac58ce7787ffd43d9863175849bde09d5d1f582709"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_893.nc",
+    "size": 1013480,
+    "mtime_ns": 1730532045000000000,
+    "sha256": "a8c3716b79bb96d3856a2902e59656ea1b9f52e0e1b9fc81e8da30e4fa0e99f5"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_895.nc",
+    "size": 953920,
+    "mtime_ns": 1730532038000000000,
+    "sha256": "28573db750b70a1cad428de6eee9ebd724a5baab2474ef4d5b8641b46f056723"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_936.nc",
+    "size": 1007560,
+    "mtime_ns": 1730532041000000000,
+    "sha256": "faae11547098444caf7607a91d40f06ab9a101c1b97d2810b16d980ec4815981"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_953.nc",
+    "size": 827200,
+    "mtime_ns": 1730532057000000000,
+    "sha256": "82816b32824d99c94ff4dc448ecca51f2d1b3fef11502da7683d14d1b91e3336"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_956.nc",
+    "size": 659200,
+    "mtime_ns": 1730532068000000000,
+    "sha256": "a84ae8cb72dfce9519c7e08930030b6fc4085f277e190eda85acd3f55ce2af87"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_958.nc",
+    "size": 1008440,
+    "mtime_ns": 1730532070000000000,
+    "sha256": "f88fd6f986a863b2f09b4639220099bee2455b90fcdd9d47dc24878634cd3d52"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/dataset/ResOpsUS_963.nc",
+    "size": 659200,
+    "mtime_ns": 1730532077000000000,
+    "sha256": "1378bdf395dcafb549bdb6dcd56efa8b4da3035f0e602967e0dec5bffe1590d5"
+  },
+  {
+    "path": "/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/list/ResOpsUS_reservoir_matched_06min.csv",
+    "size": 22222,
+    "mtime_ns": 1764484610000000000,
+    "sha256": "347d21f0ddab901438d084562668b7aa672fff8c5dbb2427ea4d85735de5f506"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-01.nc",
+    "size": 264264956,
+    "mtime_ns": 1794293712980776294,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-02.nc",
+    "size": 242965414,
+    "mtime_ns": 1794294906442325351,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-03.nc",
+    "size": 278562793,
+    "mtime_ns": 1794296273725555871,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-04.nc",
+    "size": 272995528,
+    "mtime_ns": 1794297563268753100,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-05.nc",
+    "size": 276504032,
+    "mtime_ns": 1794298874483660672,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-06.nc",
+    "size": 269658278,
+    "mtime_ns": 1794300179954532638,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-07.nc",
+    "size": 279541878,
+    "mtime_ns": 1794301494532290692,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-08.nc",
+    "size": 276106158,
+    "mtime_ns": 1794302853066340908,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-09.nc",
+    "size": 264022918,
+    "mtime_ns": 1794304081256136481,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-10.nc",
+    "size": 269970081,
+    "mtime_ns": 1794305368824629060,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-11.nc",
+    "size": 260987591,
+    "mtime_ns": 1794306560409599923,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2001-12.nc",
+    "size": 270682685,
+    "mtime_ns": 1794307752416237831,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-01.nc",
+    "size": 265906809,
+    "mtime_ns": 1794308970457935539,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-02.nc",
+    "size": 241642086,
+    "mtime_ns": 1794310077338986729,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-03.nc",
+    "size": 275054742,
+    "mtime_ns": 1794311393893565166,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-04.nc",
+    "size": 272683426,
+    "mtime_ns": 1794312672525622819,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-05.nc",
+    "size": 277081282,
+    "mtime_ns": 1794314214050848782,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-06.nc",
+    "size": 268500387,
+    "mtime_ns": 1794315753055935005,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-07.nc",
+    "size": 280007563,
+    "mtime_ns": 1794317317422941963,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-08.nc",
+    "size": 275775725,
+    "mtime_ns": 1794318893266667283,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-09.nc",
+    "size": 264303843,
+    "mtime_ns": 1794320320588308330,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-10.nc",
+    "size": 273648298,
+    "mtime_ns": 1794321884106532402,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-11.nc",
+    "size": 260067157,
+    "mtime_ns": 1794323262641401606,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2002-12.nc",
+    "size": 269535686,
+    "mtime_ns": 1794324702043558584,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-01.nc",
+    "size": 262960920,
+    "mtime_ns": 1794326114296032641,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-02.nc",
+    "size": 243921991,
+    "mtime_ns": 1794327455470607424,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-03.nc",
+    "size": 278499937,
+    "mtime_ns": 1794329153597472608,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-04.nc",
+    "size": 270729013,
+    "mtime_ns": 1794333038880904591,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-05.nc",
+    "size": 279667934,
+    "mtime_ns": 1794338889685469297,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-06.nc",
+    "size": 272209249,
+    "mtime_ns": 1794341906236598176,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-07.nc",
+    "size": 277927351,
+    "mtime_ns": 1794343523302721866,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-08.nc",
+    "size": 277892110,
+    "mtime_ns": 1794345024545628962,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-09.nc",
+    "size": 265682317,
+    "mtime_ns": 1794346444574456842,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-10.nc",
+    "size": 268431819,
+    "mtime_ns": 1794347869381268227,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-11.nc",
+    "size": 263553154,
+    "mtime_ns": 1794349283759217175,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2003-12.nc",
+    "size": 269248407,
+    "mtime_ns": 1794350737287707641,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-01.nc",
+    "size": 265216949,
+    "mtime_ns": 1794352217126885789,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-02.nc",
+    "size": 253966929,
+    "mtime_ns": 1794353589778184061,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-03.nc",
+    "size": 281337846,
+    "mtime_ns": 1794355162059874226,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-04.nc",
+    "size": 269819040,
+    "mtime_ns": 1794356731898213854,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-05.nc",
+    "size": 279752044,
+    "mtime_ns": 1794358244336116168,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-06.nc",
+    "size": 272212374,
+    "mtime_ns": 1794359793559238462,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-07.nc",
+    "size": 282187314,
+    "mtime_ns": 1794361441625718545,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-08.nc",
+    "size": 279094240,
+    "mtime_ns": 1794363006017339080,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-09.nc",
+    "size": 264960875,
+    "mtime_ns": 1794364426264047533,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-10.nc",
+    "size": 275795641,
+    "mtime_ns": 1794365768836782039,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-11.nc",
+    "size": 268145942,
+    "mtime_ns": 1794367030549993315,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2004-12.nc",
+    "size": 270101770,
+    "mtime_ns": 1794368364747744830,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-01.nc",
+    "size": 274258399,
+    "mtime_ns": 1794369784228263876,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-02.nc",
+    "size": 249802570,
+    "mtime_ns": 1794371122776982735,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-03.nc",
+    "size": 276121810,
+    "mtime_ns": 1794372467476225261,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-04.nc",
+    "size": 270583487,
+    "mtime_ns": 1794373731632411944,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-05.nc",
+    "size": 276255137,
+    "mtime_ns": 1794375049586903733,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-06.nc",
+    "size": 271312758,
+    "mtime_ns": 1794376301714802593,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-07.nc",
+    "size": 277551618,
+    "mtime_ns": 1794377533458136907,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-08.nc",
+    "size": 278292371,
+    "mtime_ns": 1794378806254663342,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-09.nc",
+    "size": 261636673,
+    "mtime_ns": 1794380016823801212,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-10.nc",
+    "size": 270356883,
+    "mtime_ns": 1794381186258379036,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-11.nc",
+    "size": 263031210,
+    "mtime_ns": 1794382385746516177,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/history/EXP000_spinup_USA_D_0p1_hist_unitcat_2005-12.nc",
+    "size": 267949098,
+    "mtime_ns": 1794383712735817798,
+    "verification": "READ_ONLY_SIZE_MTIME_METADATA; target arrays only"
+  },
+  {
+    "path": "/share/home/dq061/wzx/CoLM/cases/EXP000_spinup_USA_D_0p1/riverlake/unitcatchment_regional.nc",
+    "size": 184617961,
+    "mtime_ns": 1793625840353018947,
+    "sha256": "59da20c81425bc8ffb7bfcfaa4ec1f930e27eacbc0c2f6add2e190dab750a2fe"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/config/openbench_manual/missouri/dam_all.yaml",
+    "size": 1616,
+    "mtime_ns": 1794818526613945000,
+    "sha256": "3f6eafa9210e00dc5685185cca16245de7d6fc7f86ad95da35035b6efa68de15"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_872_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819457800194707,
+    "sha256": "cc4593d795286ccd362b142e9f68d16cc1bad5362eebbc4c240f9906c27e4578"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_893_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819459327548368,
+    "sha256": "ae626921dab660ed6814e40f2d503c1d983707384eb10d30c056d3d1fcc364a4"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_936_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819461555242875,
+    "sha256": "10c5316dbf03d61dfcc1438c33b4f73551568e360762d2be3d0134d2911380af"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_953_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819462526030627,
+    "sha256": "4b177840bc6303e0d358ece9f3eea02a0f94869fca602307fef420410aa60aeb"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_956_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819463154464365,
+    "sha256": "9a3b85fda2d36c7b38381f9e23f87201b5c65dde7237afd18fbc6267fa4a5cea"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_ref_958_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819463501495164,
+    "sha256": "a6ce238c0c5f2ff7b3de85b0f25ab7b68e0724443118d7612b3118498d979ed8"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_872_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819614482965761,
+    "sha256": "4ed1df995bbed1f449186cdde0ef445198de6ad6d6771ca09c57622ace20c338"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_893_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819615202479608,
+    "sha256": "81b29986e4be27fb2339884d5a344c331d3e3f1aa31b9a22fe4c4de9f832d122"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_936_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819616459916132,
+    "sha256": "a0b9144779f7379f7b3adf85cdf03f14bc2c1dfbcdb273d23445c104003a5e62"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_953_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819616945649818,
+    "sha256": "2f5cef6b752af41151e888eee1fe827fc5ef8396437bca8740a98c5288dcc636"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_956_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819617190157946,
+    "sha256": "97e4d2c15bfd1602eb0bf9ca12d07d3e094067f53126e1c85b0942acfd9db66f"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Inflow_sim_958_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819617427060200,
+    "sha256": "2e860de695853bf2a2d36716abd024ca1750fcf73704494e78bc9184d3ec74fb"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_872_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819761992445334,
+    "sha256": "a5a2b066667e67b3e826091299a059b5fbb38e682b141680f4ac332f31ef9a12"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_893_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819763539884662,
+    "sha256": "062c0adae0ffd11c774cd1d3d8eb47d53ac8578864ee28adf2ed238be7e83c32"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_936_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819765944826046,
+    "sha256": "f90c03e8126b574c67b5658c2c8c0182c42ca18d1cc258fee8f8e8d0a86a0fc7"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_953_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819766911279746,
+    "sha256": "602ecd4078c31a8780e8db68bb6e8c74d2d62a7faee956eda74c9ef0854ab52b"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_956_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819767301014166,
+    "sha256": "417af6ab0eb8cc02f05ee7edd3f4099bde737c5d3fc33dca44e6474725b14427"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_958_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819767894964118,
+    "sha256": "87e3c5a5f05fe710e79b7b70f7c3b490bf52ba425972649fb43eb4a3e775349a"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_ref_963_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794819768238006851,
+    "sha256": "45286fffd988b33d51916ca5ef7b3f725e37fc22df82f68b38b91782c823eacd"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_872_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819923569497039,
+    "sha256": "2aad7774559792eac943c376f1acb9a5e12b1c2475565ffa0be42a92f028206f"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_893_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819924309619951,
+    "sha256": "e33869460c43049182b7c23720bc32b4ade9613fee3568ad229784ad472e00b4"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_936_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819925591909980,
+    "sha256": "57fa5790e5357976a622a3626c3a2a9d6ccfe9e827bed0572718f55cbe70d4ba"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_953_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819926084051923,
+    "sha256": "77b21f90af655c3c60f83b15f592651be31120447774074b9961d430b4e3de5e"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_956_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819926325572039,
+    "sha256": "53080c95679443929dda49e212325200e59c92351a73a5fd61747e64b34a47a6"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_958_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819926575364673,
+    "sha256": "14b4fbfa9c8cda5539143cd824e6d68ef2433820dc520e39312fc6d46b4554b9"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Outflow_sim_963_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794819926828088643,
+    "sha256": "6ea28719a33cadd253b6eb6fc59efb08583072ab5e0b40f739efd7c64c46c236"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_872_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794820073198680644,
+    "sha256": "481d110e0f73b635b45130287a56b43e1c8f95a9c69e5ce81f6333968a2ee104"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_893_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794820074913497374,
+    "sha256": "3be9bd25d65995052a8571c6ba79819565a838bc427ab7856601a4dfe2590630"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_936_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794820077277375086,
+    "sha256": "68e06635a001f7906fbaab36704422d810d8b200e4997729026710f8dbcfac4d"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_953_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794820078260634217,
+    "sha256": "6524bc61dbe20f6170ee67453d89c36a47e94d3b54bd8ce4379e4ebba4ca5a43"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_956_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794820078717538548,
+    "sha256": "22472dfc0fad2aa616e55d0e0216d13bbf65ebefdc10f96f4d6ba706851db400"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_958_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794820079256706579,
+    "sha256": "5462856ad9d195d65201a220476c6151e2e1cfcdf07f0657f1eb7a34ef14c8ac"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_ref_963_2001_2005.nc",
+    "size": 31993,
+    "mtime_ns": 1794820079663521580,
+    "sha256": "93cba3b81edd6c5de01a1df24875a352c17aaaa41405a0c90fbb8c06c022d92c"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_872_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794820235983340018,
+    "sha256": "5c33e7d3b5ab04e17959a1b5293835b7333358c4f54cd4d61c8eec8e887db7d7"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_893_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794820236726019040,
+    "sha256": "9c7a89271f7db1c742a14400363a14b74507737c143b694862b02874adcd99d1"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_936_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794820238033558471,
+    "sha256": "a131bd80b57206cf441f4a2e6b261ba23166cf86ece16e78b736c7257dd4aecb"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_953_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794820238521658087,
+    "sha256": "d7ca3d3129d90cd899bee65739c5f8c5cdd3aaba1804769847eb6b7a0992f62a"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_956_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794820238768589427,
+    "sha256": "df238dacbfc3fd86db11a3a911e16366a500d7c8fd10fb6ca9978bcc8f8c5b20"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_958_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794820239026636164,
+    "sha256": "4728ecf52419d834933ec6392fb8f7841610e158d17384ab879ded7b4dd0d983"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/data/stn_ResOpsUS_E1_D/Dam_Water_Storage_sim_963_2001_2005.nc",
+    "size": 36140,
+    "mtime_ns": 1794820239277385301,
+    "sha256": "2ddfc8c6ce9bb1e901286b0283568a0904ee8313be728f6b6127dd52b68bfa99"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/reservoir_matching/Dam_Inflow_ResOpsUS_E1_D.json",
+    "size": 65454,
+    "mtime_ns": 1794820239416302000,
+    "sha256": "963a9cb033e1c7a0008d8abf6735d68a3f18f257adc36025b7fcc860f4eca957"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/reservoir_matching/Dam_Outflow_ResOpsUS_E1_D.json",
+    "size": 65517,
+    "mtime_ns": 1794820260985544000,
+    "sha256": "4173089f3970b444c4edd9c11ad3094c2fa083889acc51def2472ee7bc8e8881"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/reservoir_matching/Dam_Water_Storage_ResOpsUS_E1_D.json",
+    "size": 65163,
+    "mtime_ns": 1794820281715475000,
+    "sha256": "146f6ad2e011289b1271de12f6c6374a72385a7ff9e3fc3e6478c3130e159db6"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log",
+    "size": 297584,
+    "mtime_ns": 1794820369551214529,
+    "sha256": "0e5fe3cda526882257063b258bb436e114f7e61e77b3a7c4d6e53b87cd3e4e69"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run_manifest.json",
+    "size": 812543,
+    "mtime_ns": 1794819443662649000,
+    "sha256": "3ef08cf2597dacc8a1c248617e04aadd1620f403a3bf553b78616cdc7089c371"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/stn_ResOpsUS_E1_D_list.csv",
+    "size": 8935,
+    "mtime_ns": 1794820281727832000,
+    "sha256": "ef9256510da76e5cd0289dd93c408f124fc5d69e3a0385b321de0c97da79e4ee"
+  },
+  {
+    "path": "/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/resopsus_reference/list/ResOpsUS_reservoir_matched_06min.csv",
+    "size": 24648,
+    "mtime_ns": 1794759496343132000,
+    "sha256": "d988727849ae631ce62ccfda3d93dd0d9bd0ac5468b704686422b33d9ddedf8b"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_joint_2001_2002/analyze.py",
+    "size": 40943,
+    "mtime_ns": 1794807700676977000,
+    "sha256": "3c836cf2966fc06a370c4e34947943de0cd6298ac9e243ac19f7daaa6fea5b5b"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_joint_2001_2002/runs/20261116_134143/tables/reservoir_matching_audit.csv",
+    "size": 3515,
+    "mtime_ns": 1794807767876271000,
+    "sha256": "55ad58c231db80ec57f97c1c0738d0797ae830fc513ae422b697f9ec62f98ddc"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_review_2001_2005_20261119/check.py",
+    "size": 21086,
+    "mtime_ns": 1795085558025877000,
+    "sha256": "2686a9edf377483920e24952fd16995a4914d7d918395d3c5cd92b5cf2219b83"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_review_2001_2005_20261119/results/mainstem_evidence.csv",
+    "size": 5387,
+    "mtime_ns": 1795085397977282000,
+    "sha256": "bc98ee05c9b8646fb013206d3ecd40949f76f122d551bfd51d7b879560c2bb72"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_review_2001_2005_20261119/results/mainstem_mask_samples.csv",
+    "size": 837,
+    "mtime_ns": 1795085397978824000,
+    "sha256": "d4013b16303b6b74bde4762ce7c7827740bd3dd763672e56e4b55910c18eead1"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_review_2001_2005_20261119/results/model_file_presence.csv",
+    "size": 8305,
+    "mtime_ns": 1795085397186281000,
+    "sha256": "69d7660353d48dc2ad2f95aeef184aa52359dc03b8efb7eab8097c5fcc5d3b77"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_review_2001_2005_20261119/results/selection_reproduction.json",
+    "size": 232,
+    "mtime_ns": 1795085398052107000,
+    "sha256": "7b20317655f61061c6fcd81ca515aab7584da5a057da0af98ce3c6e10919bef3"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/reservoir_diagnostics/analyze.py",
+    "size": 14919,
+    "mtime_ns": 1795077947419104000,
+    "sha256": "a371263291b3003ee1089f4006766fa112277c27935baa6ab0938f83a4b24316"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/reservoir_diagnostics/runs/EXP000_spinup_USA_missouri_dam_all_E1_D_20261119_164704/tables/matching_audit.csv",
+    "size": 37860,
+    "mtime_ns": 1795078169314698000,
+    "sha256": "0f3d715049dc5cfece9cb0ad90aa358bae9ee0c9a2d312d3bce08b5dba5b4585"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/reservoir_diagnostics/runs/EXP000_spinup_USA_missouri_dam_all_E1_D_20261119_164704/tables/metrics.csv",
+    "size": 20334,
+    "mtime_ns": 1795078169312151000,
+    "sha256": "b19959aa6b14768bafa7c70e0ee654208bff30278b3d4b03d9a6c023586ce56e"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dam_analysis/reservoir_diagnostics/runs/EXP000_spinup_USA_missouri_dam_all_E1_D_20261119_164704/tables/selection_audit.csv",
+    "size": 5069,
+    "mtime_ns": 1795078169330372000,
+    "sha256": "df61d28da7470bbc6b9f3bed39d468383ed4fef40a266a3afe0b9a7e5270ff72"
+  },
+  {
+    "path": "/share/home/dq134/wzx/DLB_experiments/dlb_prepare_resopsus.py",
+    "size": 7230,
+    "mtime_ns": 1795085200320464000,
+    "sha256": "b13d87150acd46d02b2c7a5d0732eac45c66c1b5e9c207383f4724c866c3a568"
+  },
+  {
+    "path": "/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/core/metrics.py",
+    "size": 67061,
+    "mtime_ns": 1794797302554687178,
+    "sha256": "a8d03a79b9a9c6dd27e4a810a6122d20a93e39caa39645ec8655a6b952a8737b"
+  },
+  {
+    "path": "/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/data/basin_mask.py",
+    "size": 8109,
+    "mtime_ns": 1794797302839405000,
+    "sha256": "6aa3eb8452d87b4512e960a433f1aff8aa832e89eabb860d637e5923d2c9edcf"
+  },
+  {
+    "path": "/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/data/custom/ResOpsUS_filter.py",
+    "size": 5991,
+    "mtime_ns": 1794798302065234000,
+    "sha256": "0567d6aaff4864cde48a83ecfebdd3e121bdd872c8d29aa2ce894b9156dc3358"
+  },
+  {
+    "path": "/share/home/dq134/wzx/openbench/openbench_1015/src/openbench/data/reservoir.py",
+    "size": 13837,
+    "mtime_ns": 1794802792040339000,
+    "sha256": "0f2e9f0a3e75fb639d23a5a2c90403e3bfd641ab920edffb4f55cd30ed7be3aa"
+  },
+  {
+    "path": "/share/home/dq134/wzx/openbench/postprocess/basin_mask/outputs/basin_masks_06min/missouri/missouri_basin.nc",
+    "size": 84294814,
+    "mtime_ns": 1793154892328858795,
+    "sha256": "1df935154c427d714dbdd3c17280a18d64bdcce856d452a71d0dca9244709a22"
+  }
+]

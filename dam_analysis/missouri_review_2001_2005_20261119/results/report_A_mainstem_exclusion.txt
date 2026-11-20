@@ -1,0 +1,84 @@
+A. 五座主要干流水库未纳入本次评价的具体原因
+
+结论：307、753、870、884、895均不在本次配置指定的参考站点白名单中。这是已核实的、位于模型ID匹配和流域掩膜之前的排除原因；不是本次联合诊断绘图漏画，也不是这些水库没有模型/参考数据。
+当前上游原始06min参考清单同样不含这五个ID。未找到该原始清单制作时逐坝排除日志，故不能进一步声称它们当初因空间误差、匹配阈值或某个物理规则被移除。准备脚本中的重复ID排除规则不能解释这五个ID，因为原始清单中已无其任何行。
+
+配置与证据路径：
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/config/openbench_manual/missouri/dam_all.yaml
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run_manifest.json
+/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/resopsus_reference/list/ResOpsUS_reservoir_matched_06min.csv
+/share/home/dq013/zhwei/OpenBench/Reference/Station/Anth/Dam/ResOpsUS/list/ResOpsUS_reservoir_matched_06min.csv
+canonical_config.reference.overrides.ResOpsUS.fulllist明确指定上述白名单；配置只给出参考来源和清单路径，未显式列出五坝ID。三变量均使用此清单。
+
+筛选链：参考白名单159行 → 范围、Flag、时段和精确模型ID匹配后60行 → Missouri格点掩膜后29行。
+{
+  "prepared_rows": 159,
+  "original_rows": 167,
+  "candidate_count": 60,
+  "mask_kept": 29,
+  "candidate_ids_equal_saved_selected": true,
+  "kept_ids_equal_final": true,
+  "five_ids_in_prepared": [],
+  "five_ids_in_original": []
+}
+现有代码的时间筛选要求 use_eyear-use_syear >= min_year，检查坐标LON/LAT，而非LON_org/LAT_org；匹配为精确GRanD ID，无最近邻替代。该路径中五坝从白名单入口就不存在。
+当前文件可精确重现保存的60候选和29最终ID集合；这是对当前文件的复核。未保存当时清单逐字节快照，不能将现存源码/清单的校验和冒充历史构建证据。
+
+审计表语义：
+/share/home/dq134/wzx/DLB_experiments/dam_analysis/reservoir_diagnostics/runs/EXP000_spinup_USA_missouri_dam_all_E1_D_20261119_164704/tables/selection_audit.csv
+/share/home/dq134/wzx/DLB_experiments/dam_analysis/reservoir_diagnostics/runs/EXP000_spinup_USA_missouri_dam_all_E1_D_20261119_164704/tables/matching_audit.csv
+selection_audit只覆盖最终清单、指标表和matching_selected的并集；五坝未进matching_selected，因此该表连“被排除”行都没有。matching_audit只覆盖最终Flag=True清单中的29座。二者都不是全体模型/参考ID的逐级拒绝日志。
+reservoir_matching/*.json的common_ids含全部1712个跨月模型共同ID；其中含五坝，不等于它们已被选入参考候选。selected_ids为60，五坝均不在。
+
+逐坝逐变量存在性与有效样本数（完整表 mainstem_evidence.csv）：
+ ID         name variable  model_months_present  model_finite_n  ref_finite_n  in_prepared_list  in_selected_ids  in_final_station
+307    Fort Peck   inflow                    60            1826          1826             False            False             False
+307    Fort Peck  outflow                    60            1826          1826             False            False             False
+307    Fort Peck  storage                    60            1826          1825             False            False             False
+753     Garrison   inflow                    60            1826          1826             False            False             False
+753     Garrison  outflow                    60            1826          1826             False            False             False
+753     Garrison  storage                    60            1826          1826             False            False             False
+870         Oahe   inflow                    60            1826          1826             False            False             False
+870         Oahe  outflow                    60            1826          1808             False            False             False
+870         Oahe  storage                    60            1826          1826             False            False             False
+884     Big Bend   inflow                    60            1826          1821             False            False             False
+884     Big Bend  outflow                    60            1826          1732             False            False             False
+884     Big Bend  storage                    60            1826          1826             False            False             False
+895 Gavins Point   inflow                    60            1826          1826             False            False             False
+895 Gavins Point  outflow                    60            1826          1826             False            False             False
+895 Gavins Point  storage                    60            1826          1826             False            False             False
+
+反事实掩膜核验（并非重新评价）：
+ ID coordinate_kind      lon     lat  mask_lon  mask_lat  mask_value
+307   old_reference -106.415 48.0011   -106.45     48.05           1
+307   parameter_dam -106.396  47.996   -106.35     47.95           1
+307    routing_cell  -106.45   48.05   -106.45     48.05           1
+753   old_reference -101.432 47.5061   -101.45     47.55           1
+753   parameter_dam -101.421  47.496   -101.45     47.45           1
+753    routing_cell  -101.45   47.45   -101.45     47.45           1
+870   old_reference -100.398 44.4563   -100.35     44.45           1
+870   parameter_dam -100.396  44.446   -100.35     44.45           1
+870    routing_cell  -100.45   44.45   -100.45     44.45           1
+884   old_reference -99.4486 44.0398    -99.45     44.05           1
+884   parameter_dam  -99.446  44.037    -99.45     44.05           1
+884    routing_cell   -99.55   44.05    -99.55     44.05           1
+895   old_reference -97.4832 42.8503    -97.45     42.85           1
+895   parameter_dam  -97.479  42.854    -97.45     42.85           1
+895    routing_cell   -97.45   42.85    -97.45     42.85           1
+五坝旧核实坝址、参数坝址及真实路由格点的掩膜值均为1，坐标也在配置经纬范围内；有有效参考和模型数据。因此没有证据将其排除归因于本次流域掩膜、模型位置近邻失败或变量全缺测。由于白名单缺少这些行，无法观察一套不存在的白名单坐标；这里明确使用旧核实位置与当前路由位置作旁证。
+
+与2001–2002诊断的比较：
+/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_joint_2001_2002/analyze.py
+/share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_joint_2001_2002/runs/20261116_134143/tables/reservoir_matching_audit.csv
+旧脚本TARGETS显式列五个可靠ID和一个未匹配的Fort Randall；从原始ResOpsUS CSV及月历史按精确ID独立提取，并核对名称/坝址。它不从这份159行参考白名单选对象，也不依赖本次OpenBench最终29座清单。故旧结果成功与本次白名单遗漏并不矛盾；新工具目前忠实反映了给定评估的选择范围，并非全Missouri水库完整性验证。
+
+未执行修复：没有补写白名单、修改掩膜或重跑评估；仅报告入口覆盖缺陷。若后续修复，应在新评估项目中明确纳入五坝并重新核验身份/时间支持。
+
+复现命令（--out必须是尚不存在的目录）：
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 /share/home/dq134/wzx/openbench/openbench_1015/.venv/bin/python /share/home/dq134/wzx/DLB_experiments/dam_analysis/missouri_review_2001_2005_20261119/check.py --out /tmp/missouri_review_NEW
+rg -n '60 common stations|60 -> 29' /share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/openbench_output/EXP000_spinup_USA_missouri_dam_all_E1_D/run.log
+Python检查清单ID：
+pd.read_csv('/share/home/dq134/wzx/CoLM/DLB_nml/EXP000_spinup_USA/resopsus_reference/list/ResOpsUS_reservoir_matched_06min.csv').query('ID in [307,753,870,884,895]')
+
+详细路径、行号见 evidence_excerpts.txt；原文件与代码SHA256见 fingerprints.json。
+补充完整性核验：与上次联合诊断保存的输入SHA256对照，182个既有评估目录文件全部一致，详见 existing_evaluation_integrity.json。

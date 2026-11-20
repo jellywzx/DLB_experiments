@@ -1,0 +1,10 @@
+{
+  "prepared_rows": 159,
+  "original_rows": 167,
+  "candidate_count": 60,
+  "mask_kept": 29,
+  "candidate_ids_equal_saved_selected": true,
+  "kept_ids_equal_final": true,
+  "five_ids_in_prepared": [],
+  "five_ids_in_original": []
+}
