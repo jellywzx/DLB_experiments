@@ -36,12 +36,40 @@
 #   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --comparisons --dry-run
 # -D/-L/-B/-DL/-DB/-LB/-DLB 分别对应 E1_D/E2_L/E3_B/E4_DL/E5_DB/E6_LB/E7_ALL。
 # -L -B 选择两个单项处理，-LB 选择组合处理 E6_LB；--all 不能与其他选择器一起使用。
+# 可追加 --variables streamflow dam_storage，仅提交所选实验组中这些变量的项目。
+# 变量使用模板名（也可带 .yaml/.yml），不区分大小写；不指定则保留全部变量。
 #
 # 5. 自定义资源的覆盖重跑示例：预览、提交均带相同资源参数。
 #   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --overwrite --cores 4 --slots-per-node 48 --queue normal --memory 150G --walltime 24:00 --max-concurrent 20 --dry-run
 #   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --overwrite --cores 4 --slots-per-node 48 --queue normal --memory 150G --walltime 24:00 --max-concurrent 20 --submit
 # --cores 为每个评估使用的核数，--slots-per-node 为每个任务在单节点申请的 slots，
 # --max-concurrent 为数组任务最大并发数；--cores 不得大于 --slots-per-node。
+#
+# 6. 指定变量：--variables 与实验选择器取交集，预览和提交使用相同选择范围。
+# 仅提交 D 和 LB 两组的径流、库容评估：
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D -LB --variables streamflow dam_storage --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D -LB --variables streamflow dam_storage --submit
+# 所有实验组中，只选择水库入流、出流和库容：
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --variables dam_inflow dam_outflow dam_storage --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" --all --variables dam_inflow dam_outflow dam_storage --submit
+# 仅重试 D 组径流评估中确认失败的项目：
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --variables streamflow --retry-failed --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --variables streamflow --retry-failed --submit
+# 覆盖重跑 D 组库容评估，旧结果在任务启动时归档：
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --variables dam_storage --overwrite --dry-run
+#   python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D --variables dam_storage --overwrite --submit
+# 标准变量名：streamflow、inundation_fraction、inundation_area、dam_inflow、dam_outflow、dam_storage。
+# 变量必须已在目标实验 manifest 中登记；未知名称会报错并列出可用值。
+# 名称不区分大小写，可带 .yaml/.yml；不指定 --variables 时保留所有变量。
+# 不同变量组合使用独立的数组作业和快照；默认仍跳过输出目录非空的项目。
+#
+# 7. 快捷入口也可指定变量（历史 .sh 入口需先更新）：
+#   bash "$EXP_DIR/config/openbench_jobs/submit_openbench_D.sh" --variables streamflow dam_storage --dry-run
+#   bash "$EXP_DIR/config/openbench_jobs/submit_openbench_D.sh" --variables streamflow dam_storage --submit
+# 若历史入口提示 Unsupported option，或主脚本提示 submission entry differs，
+# 可先仅备份并更新快捷入口；在已激活 OpenBench 环境的 shell 中执行：
+#   (cd "$DLB_ROOT" && python3 -c 'import sys; from pathlib import Path; from dlb_09_submit_openbench import generate_submit_entries; generate_submit_entries(Path(sys.argv[1]).expanduser().resolve(), overwrite=True)' "$EXP_DIR")
+# 此更新只处理入口 .sh，不生成数组、不重跑评估、不提交任务。
 #
 # --dry-run 完全不写文件；不带 --dry-run/--submit 时只生成作业文件；仅 --submit 调用 bsub。
 # 覆盖前备份已有作业文件至作业目录的 .dlb_backups/；旧结果在任务启动时另行归档。
@@ -238,6 +266,11 @@ EXP_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 ARGS=("$@")
 while (($#)); do
   case "$1" in
+    --variables)
+      shift
+      (($#)) && [[ "$1" != -* ]] || {{ echo "Missing value: --variables" >&2; exit 2; }}
+      while (($#)) && [[ "$1" != -* ]]; do shift; done ;;
+    --variables=*) shift ;;
     --submit|--dry-run|--overwrite|--retry-failed|--rerun-unverified|-h|--help) shift ;;
     --openbench-exe|--queue|--cores|--slots-per-node|--memory|--walltime|--max-concurrent|--out-dir|--log-dir)
       (($# >= 2)) || {{ echo "Missing value: $1" >&2; exit 2; }}
@@ -280,6 +313,8 @@ def main()->int:
     p.add_argument('--spinup',action='store_true',help='Select spinup evaluation projects')
     p.add_argument('--comparisons',action='store_true',help='Select eight-experiment comparison projects')
     p.add_argument('--all',dest='all_projects',action='store_true',help='Select every OpenBench project')
+    p.add_argument('--variables',nargs='+',action='extend',metavar='NAME',
+                   help='Filter selected groups by variable template names (case-insensitive; .yaml/.yml optional); default: all variables')
     p.add_argument('--retry-failed',action='store_true',
                    help='Retry only confirmed failed outputs; archive old results at task startup')
     p.add_argument('--openbench-exe',type=Path,
@@ -321,11 +356,26 @@ def main()->int:
     manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
     projects=manifest.get('evaluation',{}).get('projects',[])
     if not isinstance(projects,list) or not projects:raise ValueError('manifest has no OpenBench projects')
+    variables=set()
+    if args.variables:
+        available={item.get('type') for item in projects if isinstance(item.get('type'),str)}
+        by_name={name.lower():name for name in available}
+        for raw in args.variables:
+            name=re.sub(r'\.(?:yaml|yml)$','',raw,flags=re.I).lower()
+            if name not in by_name:
+                raise ValueError(f'unknown variable template: {raw}; available: {", ".join(sorted(available)) or "none (manifest projects need type fields)"}')
+            canonical=by_name[name]
+            if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*',canonical):
+                raise ValueError(f'unsafe variable template name: {canonical!r}')
+            variables.add(canonical)
     if args.all_projects:label='all';selected=projects
     else:
         label='_'.join(short for short,_ in requested)
         treatments={treatment for _,treatment in requested}
         selected=[item for item in projects if item.get('treatment') in treatments]
+    if variables:
+        selected=[item for item in selected if item.get('type') in variables]
+        label+='__vars_'+'__'.join(sorted(variables))
     if not selected:raise ValueError(f'no OpenBench projects selected for {label}')
     if args.retry_failed:label+='_retry_failed'
     elif args.overwrite:label+='_overwrite'

@@ -30,14 +30,14 @@ def fixture(root:Path)->Path:
             config=configs/f'{kind}_{short}.yaml'
             config.write_text(f'project:\n  name: {name}\n  output_dir: {outputs}\n')
             projects.append({'project':name,'config':str(config.relative_to(root)),
-                             'treatment':treatment,'status':'missing'})
+                             'treatment':treatment,'type':kind,'status':'missing'})
     for treatment in ('spinup','ctl','comparisons'):
         for kind in ('streamflow','inundation_fraction','inundation_area'):
             name=f'study_basin_{kind}_{treatment}'
             config=configs/f'{kind}_{treatment}.yaml'
             config.write_text(f'project:\n  name: {name}\n  output_dir: {outputs}\n')
             projects.append({'project':name,'config':str(config.relative_to(root)),
-                             'treatment':treatment,'status':'missing'})
+                             'treatment':treatment,'type':kind,'status':'missing'})
     (root/'manifest.yaml').write_text(json.dumps({'evaluation':{'projects':projects}}))
     executable=root/'openbench'
     executable.write_text('#!/usr/bin/env bash\necho "$@" >> "$OPENBENCH_CALLS"\n')
@@ -53,6 +53,51 @@ def run(root:Path,executable:Path,*args:str,ok:bool=True,env:dict|None=None):
 
 
 class OpenBenchJobTests(unittest.TestCase):
+    def test_variables_intersect_groups_and_use_independent_snapshots(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable=fixture(root)
+            run(root,executable,'-L','-B')
+            folder=root/'config/openbench_jobs'
+            original=(folder/'openbench_L_B_projects.tsv').read_bytes()
+            result=run(root,executable,'-L','-B','--variables','Streamflow.yaml',
+                       'inundation_area','streamflow')
+            self.assertIn('selected=4 pending=4',result.stdout)
+            label='L_B__vars_inundation_area__streamflow'
+            mapping=folder/f'openbench_{label}_projects.tsv'
+            rows=mapping.read_text().splitlines()[1:]
+            self.assertEqual(len(rows),4)
+            self.assertTrue(all('inundation_fraction' not in row for row in rows))
+            self.assertTrue(all(row.split('\t')[1].endswith(('_L','_B')) for row in rows))
+            self.assertEqual((folder/'openbench_L_B_projects.tsv').read_bytes(),original)
+            result=run(root,executable,'-L','-B','--variables','inundation_area',
+                       '--variables=streamflow','--dry-run')
+            self.assertIn('Reusing generated job snapshot',result.stdout)
+
+    def test_variable_dry_run_and_invalid_names_do_not_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable=fixture(root)
+            result=run(root,executable,'--all','--variables','streamflow','--dry-run')
+            self.assertIn('selected=10 pending=10',result.stdout)
+            self.assertFalse((root/'config/openbench_jobs').exists())
+            result=run(root,executable,'--all','--variables','streamflow','typo',ok=False)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('unknown variable template: typo',result.stderr)
+            self.assertIn('available:',result.stderr)
+            self.assertFalse((root/'config/openbench_jobs').exists())
+
+    def test_variables_preserve_retry_and_overwrite_selection(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable=fixture(root)
+            for kind in ('streamflow','inundation_area'):
+                output=root/f'openbench_output/study_basin_{kind}_D'
+                output.mkdir(parents=True);(output/'.openbench_failed').touch()
+            result=run(root,executable,'-D','--variables','streamflow','--dry-run')
+            self.assertIn('selected=1 pending=0 skipped=1',result.stdout)
+            for flag in ('--retry-failed','--overwrite'):
+                result=run(root,executable,'-D','--variables','streamflow',flag,'--dry-run')
+                self.assertIn('selected=1 pending=1 skipped=0',result.stdout)
+            self.assertTrue((root/'openbench_output/study_basin_streamflow_D/.openbench_failed').exists())
+
     def test_usa_uses_huc08_lower_mississippi_mask(self):
         from dlb_08_generate_openbench import BASINS,MASK_ROOT
         masks=[mask.relative_to(MASK_ROOT).as_posix() for _,_,_,mask in BASINS['USA']]
@@ -229,6 +274,19 @@ class OpenBenchJobTests(unittest.TestCase):
 
 
 class SubmissionEntryTests(unittest.TestCase):
+    def test_entries_forward_variable_names_and_reject_missing_values(self):
+        from dlb_09_submit_openbench import generate_submit_entries
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);executable=fixture(root);generate_submit_entries(root)
+            for flags,count in ((['--variables','streamflow','inundation_area'],2),
+                                (['--variables=streamflow'],1)):
+                result=self.entry(root,'D',*flags,'--openbench-exe',executable,'--dry-run')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(f'selected={count} pending={count}',result.stdout)
+            result=self.entry(root,'D','--variables','--dry-run')
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('Missing value: --variables',result.stderr)
+
     def entry(self,root,label,*args,env=None):
         return subprocess.run(['bash',str(root/f'config/openbench_jobs/submit_openbench_{label}.sh'),
                                *map(str,args)],text=True,capture_output=True,env=env,cwd='/tmp')

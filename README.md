@@ -835,7 +835,7 @@ bash "$EXP_DIR/config/openbench_jobs/submit_openbench_all.sh" --submit
 入口默认只生成/复用 LSF 作业并预览，只有 `--submit` 调用 `bsub`；
 `--dry-run` 与 `--submit` 不能同时使用。入口固定实验选择，支持传入
 `--openbench-exe`、资源参数、`--out-dir`、`--log-dir`、`--retry-failed`、
-`--rerun-unverified`、`--overwrite`。`dlb_09` 也可直接使用新增的 `--ctl`、`--spinup`。
+`--rerun-unverified`、`--overwrite`、`--variables`。`dlb_09` 也可直接使用新增的 `--ctl`、`--spinup`。
 入口始终放在实验的 `config/openbench_jobs/`；`--out-dir` 仅改变数组作业及快照位置。
 入口不保存生成时的资源选项，运行时使用 `dlb_09` 默认值或传入值；已有数组快照
 仍按原规则复用，修改资源需 `--overwrite`。OpenBench 资源独立于 CoLM 配置，
@@ -846,6 +846,27 @@ bash "$EXP_DIR/config/openbench_jobs/submit_openbench_all.sh" --submit
 内容相同的入口直接复用，内容不同需 `--overwrite`；不覆盖符号链接。
 生成入口不会运行 OpenBench，也不会提交 CoLM 作业。全部入口与单组入口是不同提交方式，
 同一批任务请选择其中一种，避免重复排队。
+
+使用 `--variables NAME [NAME ...]` 可进一步限定变量，与实验组选择器取交集。
+名称使用 manifest 项目的 `type`（即模板名），不区分大小写，可带 `.yaml`/`.yml`；
+当前标准模板为 `streamflow`、`inundation_fraction`、`inundation_area`、
+`dam_inflow`、`dam_outflow`、`dam_storage`。名称必须已在该实验 manifest 中登记，
+未知名称会报错并列出可用值。不指定时保留所有变量；仍需指定实验组或 `--all`。
+不同变量组合使用独立的数组作业和快照文件；结果跳过、重试及覆盖规则不变。
+
+```bash
+python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D -LB \
+  --variables streamflow dam_storage --dry-run
+python3 "$DLB_ROOT/dlb_09_submit_openbench.py" "$EXP_DIR" -D -LB \
+  --variables streamflow dam_storage --submit
+bash "$EXP_DIR/config/openbench_jobs/submit_openbench_all.sh" \
+  --variables dam_inflow dam_outflow dam_storage --dry-run
+```
+
+历史实验的 `.sh` 入口需更新后才能转发新参数。可在已加载脚本的 Python 环境中
+调用 `generate_submit_entries(Path(EXP_DIR), overwrite=True)`，仅备份并更新入口；
+该操作不会生成数组或重跑评估。直接使用 Python 主脚本的新参数不依赖旧入口的转发能力，
+但非 dry-run 时仍会检查入口冲突。
 
 批量生成 LSF 独占节点作业时，每个选项直接对应一套实验：`-D`、`-L`、
 `-B` 分别选择 E1_D、E2_L、E3_B，`-DL`、`-DB`、`-LB`、`-DLB`
