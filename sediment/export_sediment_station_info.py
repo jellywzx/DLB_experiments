@@ -96,6 +96,22 @@ both --river-detail and --station-trace are none.
    文件名增加 __station__<安全编码的站点ID>，重复 ID 附加行号避免覆盖。
    站点 CSV 仍为完整评估站点表，仅导出一份，不增加逐站 CSV。
 
+8. 地形底图叠加站点，并可选按流域掩膜裁切地形：
+
+    python export_sediment_station_info.py --config /path/to/config.yaml --terrain
+    python export_sediment_station_info.py --config /path/to/config.yaml --terrain --terrain-mask /path/to/amazon_basin.nc --format both
+    python export_sediment_station_info.py --config /path/to/config.yaml --terrain --terrain-mask /path/to/amazon_basin.nc --per-station --station-trace all
+
+   --dem-file 默认使用本机 CoLMrawdata/topography_MERITHydro.nc，需含一维
+   lon、lat 及二维 elevation，单位为 m；坐标须为规则经纬网，使用 -180..180 经度。
+   --terrain-mask 可选，需含 lon、lat、basin_mask；basin_mask > 0 的网格内显示地形。
+   掩膜不筛选站点、不裁切追踪河网；地图范围仍由配置或站点及追踪范围决定。
+   --terrain-stride 默认 6，将原始 15 秒 DEM 抽样为 1.5 分钟显示，不做面积平均。
+   超过 200 万像素时进一步抽样；日志记录实际间隔、范围和有效像素数。
+   缺测地形透明，保留全部站点；站点编号增加浅色描边。
+   支持逐站图、完整追踪图和 PNG/PDF；地形图文件名末尾增加 __terrain，CSV 不变。
+   自定义 --dem-file、--terrain-mask、--terrain-stride 必须同时启用 --terrain。
+
 查看全部参数：
 
     python export_sediment_station_info.py --help
@@ -107,7 +123,8 @@ import argparse
 import logging
 import os
 import tempfile
-from contextlib import contextmanager
+from collections import OrderedDict
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -124,6 +141,9 @@ DEFAULT_ROUTING_FILE = Path(
     "/share/home/dq013/zhwei/colm/data/CoLMruntime/unitcatchment/"
     "grid_routing_data_06min.nc"
 )
+DEFAULT_DEM_FILE = Path("/share/home/dq013/zhwei/colm/data/CoLMrawdata/topography_MERITHydro.nc")
+TERRAIN_BOUNDS = (-100, 0, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000)
+TERRAIN_MAX_PIXELS = 2_000_000
 RIVER_DETAIL_CONFIG = {
     "all": (None, 0.35),
     "fine": (500.0, 0.45),
@@ -705,6 +725,178 @@ def _station_extent(stations: pd.DataFrame) -> tuple[float, float, float, float]
     )
 
 
+def _terrain_colors():
+    from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
+
+    cmap = LinearSegmentedColormap.from_list("land_elevation", [
+        "#347c56", "#6da66d", "#b9c88a", "#e4d29a", "#c5a478",
+        "#a37c5c", "#8c7770", "#c6bdb5", "#ffffff",
+    ], N=len(TERRAIN_BOUNDS) - 1)
+    return cmap, BoundaryNorm(TERRAIN_BOUNDS, cmap.N)
+
+
+def _terrain_grid(dataset, variable: str):
+    """Validate a regular geographic grid without reading its raster values."""
+    axes = []
+    for name, limit in (("lon", 180), ("lat", 90)):
+        if name not in dataset or dataset[name].ndim != 1:
+            raise ValueError(f"Terrain input requires a one-dimensional {name} coordinate")
+        axis = np.asarray(dataset[name].values, dtype=float)
+        delta = np.diff(axis)
+        if (len(axis) < 2 or not np.isfinite(axis).all() or np.any(np.abs(axis) > limit)
+                or not (np.all(delta > 0) or np.all(delta < 0))
+                or not np.allclose(delta, delta[0], rtol=1e-5, atol=1e-8)):
+            raise ValueError(f"Terrain {name} must be a regular monotonic grid in [-{limit}, {limit}]")
+        axes.append(axis)
+    if variable not in dataset:
+        raise ValueError(f"Terrain input is missing required variable: {variable}")
+    if dataset[variable].dtype.kind not in "biuf":
+        raise ValueError(f"Terrain {variable} must be numeric")
+    dims = (dataset["lat"].dims[0], dataset["lon"].dims[0])
+    if len(set(dims)) != 2 or dataset[variable].ndim != 2 or set(dataset[variable].dims) != set(dims):
+        raise ValueError(f"Terrain {variable} must have the latitude and longitude dimensions")
+    return dataset[variable].transpose(*dims), axes[0], axes[1]
+
+
+def _terrain_window(axis: np.ndarray, low: float, high: float):
+    """Include one native pixel of padding for shading and pixel-edge coverage."""
+    step = abs(axis[1] - axis[0])
+    if high < axis.min() - step / 2 or low > axis.max() + step / 2:
+        return None
+    indices = np.flatnonzero((axis >= low - step) & (axis <= high + step))
+    if not len(indices):
+        return None
+    start, stop = max(0, indices[0] - 1), min(len(axis), indices[-1] + 2)
+    return int(start), int(stop)
+
+
+@dataclass(frozen=True)
+class TerrainView:
+    rgba: np.ndarray
+    extent: tuple[float, float, float, float]
+    outline: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
+
+
+class TerrainSource:
+    """Lazy DEM windows plus a two-view LRU cache shared across output formats."""
+
+    def __init__(self, dem, mask, stride: int):
+        self.dem, self.lon, self.lat = _terrain_grid(dem, "elevation")
+        if str(self.dem.attrs.get("units", "")).strip().lower() != "m":
+            raise ValueError("Terrain elevation must declare units='m'")
+        self.stride = stride
+        self.cache = OrderedDict()
+        self.mask = None
+        if mask is not None:
+            raster, self.mask_lon, self.mask_lat = _terrain_grid(mask, "basin_mask")
+            mask_values = np.asarray(raster.values)
+            self.mask = np.isfinite(mask_values) & (mask_values > 0)
+            if self.mask_lon[0] > self.mask_lon[-1]:
+                self.mask_lon, self.mask = self.mask_lon[::-1], self.mask[:, ::-1]
+            if self.mask_lat[0] < self.mask_lat[-1]:
+                self.mask_lat, self.mask = self.mask_lat[::-1], self.mask[::-1]
+
+    def view(self, extent) -> TerrainView | None:
+        key = tuple(float(x) for x in extent)
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            return self.cache[key]
+        result = self._read_view(key)
+        self.cache[key] = result
+        if len(self.cache) > 2:
+            self.cache.popitem(last=False)
+        return result
+
+    def _read_view(self, extent):
+        from matplotlib.colors import LightSource
+
+        west, east, south, north = extent
+        if not np.isfinite(extent).all() or west >= east or south >= north:
+            raise ValueError(f"Invalid terrain map extent: {extent}")
+        xwindow = _terrain_window(self.lon, west, east)
+        ywindow = _terrain_window(self.lat, south, north)
+        if xwindow is None or ywindow is None:
+            LOG.warning("No DEM coverage for extent=%s; retaining station map without terrain", extent)
+            return None
+        nx, ny = xwindow[1] - xwindow[0], ywindow[1] - ywindow[0]
+        stride = self.stride
+        while (int(np.ceil(nx / min(stride, nx - 1)))
+               * int(np.ceil(ny / min(stride, ny - 1))) > TERRAIN_MAX_PIXELS):
+            stride += 1
+        # Small windows still need at least two pixels per axis for hillshade.
+        sx, sy = min(stride, nx - 1), min(stride, ny - 1)
+        xs, ys = slice(*xwindow, sx), slice(*ywindow, sy)
+        lon, lat = self.lon[xs], self.lat[ys]
+        z = np.asarray(self.dem.isel({self.dem.dims[0]: ys, self.dem.dims[1]: xs}).values, dtype=float)
+        if lon[0] > lon[-1]:
+            lon, z = lon[::-1], z[:, ::-1]
+        if lat[0] < lat[-1]:
+            lat, z = lat[::-1], z[::-1]
+        # xarray decodes CF _FillValue/missing_value; also accept legacy FillValue.
+        missing = self.dem.attrs.get("FillValue")
+        if missing is not None:
+            z[np.isin(z, np.asarray(missing).reshape(-1))] = np.nan
+        valid = np.isfinite(z)
+        outline = None
+        if self.mask is not None:
+            columns = np.floor((lon - self.mask_lon[0]) / np.diff(self.mask_lon[:2])[0] + 0.5).astype(int)
+            rows = np.floor((lat - self.mask_lat[0]) / np.diff(self.mask_lat[:2])[0] + 0.5).astype(int)
+            in_x = (columns >= 0) & (columns < len(self.mask_lon))
+            in_y = (rows >= 0) & (rows < len(self.mask_lat))
+            inside = self.mask[np.clip(rows, 0, len(self.mask_lat) - 1)[:, None],
+                               np.clip(columns, 0, len(self.mask_lon) - 1)[None, :]]
+            valid &= inside & in_y[:, None] & in_x[None, :]
+            mx = _terrain_window(self.mask_lon, west, east)
+            my = _terrain_window(self.mask_lat, south, north)
+            if mx is not None and my is not None:
+                mask_crop = self.mask[slice(*my), slice(*mx)]
+                if mask_crop.any() and not mask_crop.all():
+                    outline = self.mask_lon[slice(*mx)], self.mask_lat[slice(*my)], mask_crop
+        if not valid.any():
+            LOG.warning("No valid terrain inside extent/mask=%s; retaining all stations and rivers", extent)
+            return None
+        cmap, norm = _terrain_colors()
+        dx = abs(lon[1] - lon[0]) * 111320 * max(np.cos(np.deg2rad(lat.mean())), 1e-6)
+        dy = abs(lat[1] - lat[0]) * 111320
+        light = LightSource(azdeg=315, altdeg=45)
+        shade = light.hillshade(z, dx=dx, dy=dy)
+        # Missing neighbours get neutral shading, never fabricated zero elevations.
+        shade = np.nan_to_num(shade, nan=0.5)
+        rgb = cmap(norm(z))[..., :3]
+        rgb = light.blend_soft_light(rgb, shade[..., None])
+        rgba = np.dstack((rgb, valid)).astype(np.float32)
+        image_extent = (lon[0] - abs(lon[1] - lon[0]) / 2, lon[-1] + abs(lon[1] - lon[0]) / 2,
+                        lat[-1] - abs(lat[1] - lat[0]) / 2, lat[0] + abs(lat[1] - lat[0]) / 2)
+        LOG.info("Terrain extent=%s, stride=(%d,%d), spacing=(%.6g,%.6g) degrees, valid=%d/%d",
+                 extent, sy, sx, abs(lat[1] - lat[0]), abs(lon[1] - lon[0]), valid.sum(), valid.size)
+        return TerrainView(rgba, image_extent, outline)
+
+
+@contextmanager
+def _terrain_source(args):
+    custom = any(getattr(args, name, None) is not None for name in ("dem_file", "terrain_mask", "terrain_stride"))
+    if not args.terrain:
+        if custom:
+            raise ValueError("--dem-file, --terrain-mask and --terrain-stride require --terrain")
+        yield None
+        return
+    stride = args.terrain_stride if args.terrain_stride is not None else 6
+    if stride <= 0:
+        raise ValueError("--terrain-stride must be positive")
+    import xarray as xr
+
+    with ExitStack() as stack:
+        path = Path(args.dem_file or DEFAULT_DEM_FILE).expanduser().resolve()
+        dem = stack.enter_context(xr.open_dataset(path, decode_times=False, cache=False))
+        mask = None
+        if args.terrain_mask is not None:
+            mask_path = Path(args.terrain_mask).expanduser().resolve()
+            mask = stack.enter_context(xr.open_dataset(mask_path, decode_times=False, cache=False))
+        LOG.info("Terrain DEM=%s, mask=%s, requested stride=%d (display sampling, no averaging)",
+                 path, args.terrain_mask, stride)
+        yield TerrainSource(dem, mask, stride)
+
+
 def plot_station_map(
     stations: pd.DataFrame,
     path: Path,
@@ -716,6 +908,8 @@ def plot_station_map(
     river_segments: np.ndarray | None = None,
     river_detail: str = "fine",
     station_trace: StationTrace | None = None,
+    terrain: TerrainView | None = None,
+    terrain_enabled: bool = False,
 ) -> int:
     """Plot every station and full ID. Returns the number of text labels."""
     import matplotlib
@@ -743,6 +937,21 @@ def plot_station_map(
     ax.add_feature(cfeature.COASTLINE, linewidth=0.7, edgecolor="#555555")
     ax.add_feature(cfeature.BORDERS, linewidth=0.4, edgecolor="#888888")
     ax.set_extent(extent if extent is not None else _station_extent(stations), crs=ccrs.PlateCarree())
+    if terrain is not None:
+        from matplotlib.cm import ScalarMappable
+
+        ax.imshow(terrain.rgba, origin="upper", extent=terrain.extent, interpolation="nearest",
+                  transform=ccrs.PlateCarree(), zorder=1)
+        # Cartopy features default to zorder 1.5, above terrain and below rivers.
+        if terrain.outline is not None:
+            mask_lon, mask_lat, mask = terrain.outline
+            ax.contour(mask_lon, mask_lat, mask.astype(float), levels=[0.5],
+                       colors="#343434", linewidths=0.65, transform=ccrs.PlateCarree(), zorder=2)
+        cmap, norm = _terrain_colors()
+        colorbar = fig.colorbar(ScalarMappable(norm=norm, cmap=cmap), ax=ax,
+                               orientation="horizontal", pad=0.08, shrink=0.8, aspect=45,
+                               ticks=[0, 100, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000], extend="both")
+        colorbar.set_label("Elevation (m); shaded relief")
     legend_handles = []
     if river_detail != "none" and river_segments is not None and len(river_segments):
         threshold, linewidth = RIVER_DETAIL_CONFIG[river_detail]
@@ -781,7 +990,7 @@ def plot_station_map(
     labels = 0
     for sequence, index in enumerate(np.flatnonzero(valid)):
         dx, dy = offsets[sequence % len(offsets)]
-        ax.annotate(
+        annotation = ax.annotate(
             str(stations.iloc[index]["station_id"]),
             xy=(lon[index], lat[index]),
             xytext=(dx, dy),
@@ -791,6 +1000,10 @@ def plot_station_map(
             arrowprops={"arrowstyle": "-", "lw": 0.3, "color": "#777777"},
             zorder=6,
         )
+        if terrain_enabled:
+            from matplotlib.patheffects import withStroke
+
+            annotation.set_path_effects([withStroke(linewidth=2, foreground="#ffffff")])
         labels += 1
     ax.set_title(f"{title}\nSelected stations: {station_count}", fontsize=13, weight="bold")
 
@@ -865,6 +1078,12 @@ def _station_map_groups(stations: pd.DataFrame, args: argparse.Namespace):
 
 def export(args: argparse.Namespace) -> list[tuple[Path, list[Path]]]:
     _validate_trace_options(args)
+    # Open/validate terrain before any CSV or image is written; close on errors.
+    with _terrain_source(args) as terrain_source:
+        return _export(args, terrain_source)
+
+
+def _export(args: argparse.Namespace, terrain_source: TerrainSource | None) -> list[tuple[Path, list[Path]]]:
     from openbench.cli.run import _expand_config_paths
     from openbench.config import load_config
     from openbench.config.resolver import resolve_all_references
@@ -957,13 +1176,15 @@ def export(args: argparse.Namespace) -> list[tuple[Path, list[Path]]]:
                 if not figure_paths:
                     _atomic_csv(stations, csv_path)
                 for view_extent, suffix in views:
+                    terrain = terrain_source.view(view_extent) if terrain_source is not None else None
                     river_segments = None
                     if args.river_detail != "none":
                         if view_extent not in river_cache:
                             river_cache[view_extent] = select_river_segments(routing_network, args.river_detail, view_extent)
                         river_segments = river_cache[view_extent]
                     for image_format in formats:
-                        figure_path = output_dir / f"{stem}__station_map{station_suffix}{suffix}.{image_format}"
+                        terrain_suffix = "__terrain" if args.terrain else ""
+                        figure_path = output_dir / f"{stem}__station_map{station_suffix}{suffix}{terrain_suffix}.{image_format}"
                         plot_station_map(
                             map_stations,
                             figure_path,
@@ -975,6 +1196,8 @@ def export(args: argparse.Namespace) -> list[tuple[Path, list[Path]]]:
                             river_segments=river_segments,
                             river_detail=args.river_detail,
                             station_trace=station_trace,
+                            terrain=terrain,
+                            terrain_enabled=args.terrain,
                         )
                         figure_paths.append(figure_path)
             outputs.append((csv_path, figure_paths))
@@ -1007,6 +1230,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Maximum station-to-routing-node matching distance in km (default: 10)")
     parser.add_argument("--per-station", action="store_true",
                         help="Output a separate map for each station (selected IDs only in selected trace mode)")
+    parser.add_argument("--terrain", action="store_true", help="Add shaded surface elevation below stations and rivers")
+    parser.add_argument("--dem-file", type=Path, default=None,
+                        help=f"DEM NetCDF with lon, lat, elevation (m); requires --terrain (default: {DEFAULT_DEM_FILE})")
+    parser.add_argument("--terrain-mask", type=Path,
+                        help="Optional NetCDF basin_mask > 0; clips terrain only, requires --terrain")
+    parser.add_argument("--terrain-stride", type=int, default=None,
+                        help="Positive DEM display sampling interval (default: 6); requires --terrain; "
+                             "automatically increased above 2 million pixels, no averaging")
     return parser
 
 
